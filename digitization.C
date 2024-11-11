@@ -156,6 +156,26 @@ std::vector<int> mip_event(int entries,int max_layers)
         }
     return events;
 }
+std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layers)
+{
+    auto events = mip_event(entries,max_layers);
+    
+    for(auto &element : events)
+        {
+            std::vector<cpoint_t> aux_;
+            for(int i=0; i<=max_layers;i++)
+                {
+                    std::pair<int,int> pr = {element,i};
+                    for(auto &clt : cluster[pr])
+                        {
+                            aux_.push_back(clt);
+                        }
+                }
+            mip_cluster[element] = aux_;
+            aux_.clear();
+        }
+    return mip_cluster;
+}
 };
 
 
@@ -464,25 +484,8 @@ void digitization()
     hxy->Write();
     output->Close();
 
-    auto events = clust.mip_event(entries,max_layers);
-    std::map<int,std::vector<cpoint_t>> mip_clust;
-    
-    for(auto &element : events)
-        {
-            std::vector<cpoint_t> aux_;
-            for(int i=0; i<=max_layers;i++)
-                {
-                    std::pair<int,int> pr = {element,i};
-                    for(auto &clt : clust.cluster[pr])
-                        {
-                            aux_.push_back(clt);
-                        }
-                }
-            mip_clust[element] = aux_;
-            aux_.clear();
-        }
-
-    clust.mip_cluster = mip_clust;
+    clust.mip_event_clusters(entries,max_layers);
+    std::map<int,std::vector<cpoint_t>> mip_clust = clust.mip_cluster;
 /*
     int cnt=0;
     for(auto &element : events)
