@@ -21,10 +21,9 @@ class Cluster
 {
     public:
         std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster;
-        std::map<std::pair<int,int>,std::vector<hit_point_t>> hits;        
+        std::map<std::pair<int,int>,std::vector<hit_point_t>> hits;    
+        std::map<int,std::vector<cpoint_t>> mip_cluster;
         
-
-
 void print_cpoint_t(int ii,int jj)
 {
 
@@ -278,7 +277,7 @@ void digitization()
             }
         }
 
-    int max_layers = 8;
+    int max_layers = 50;
     int pBeam__;
     double eBeam__;
     double xHit[max_hits];
@@ -466,13 +465,34 @@ void digitization()
     output->Close();
 
     auto events = clust.mip_event(entries,max_layers);
+    std::map<int,std::vector<cpoint_t>> mip_clust;
+    
+    for(auto &element : events)
+        {
+            std::vector<cpoint_t> aux_;
+            for(int i=0; i<=max_layers;i++)
+                {
+                    std::pair<int,int> pr = {element,i};
+                    for(auto &clt : clust.cluster[pr])
+                        {
+                            aux_.push_back(clt);
+                        }
+                }
+            mip_clust[element] = aux_;
+            aux_.clear();
+        }
+
+    clust.mip_cluster = mip_clust;
+/*
     int cnt=0;
     for(auto &element : events)
         {
+            
             cnt++;
             cout<<element<<", ";
         }
     cout<<"No of such Events: "<<cnt<<endl;
+*/
 
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
