@@ -143,7 +143,7 @@ std::vector<int> mip_event(int entries,int max_layers)
         {
             for(int j=1; j<=max_layers; j++)
                 {
-                    if(j==1 && cluster_number(i,j)>2)
+                    if(j==1 && cluster_number(i,j)>2 || cluster_number(i,j)==0)
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
@@ -483,10 +483,12 @@ void digitization()
     hy->Write();
     hxy->Write();
     output->Close();
-
+    
+    
     clust.mip_event_clusters(entries,max_layers);
     std::map<int,std::vector<cpoint_t>> mip_clust = clust.mip_cluster;
-/*
+    /*
+    std::vector<int> events = clust.mip_event(entries,max_layers);
     int cnt=0;
     for(auto &element : events)
         {
@@ -495,7 +497,7 @@ void digitization()
             cout<<element<<", ";
         }
     cout<<"No of such Events: "<<cnt<<endl;
-*/
+    */
 
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
