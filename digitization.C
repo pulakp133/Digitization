@@ -20,9 +20,9 @@ using namespace std;
 class Cluster
 {
     public:
-        std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster;
-        std::map<std::pair<int,int>,std::vector<hit_point_t>> hits;    
-        std::map<int,std::vector<cpoint_t>> mip_cluster;
+        std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster; //Stores all the clusters
+        std::map<std::pair<int,int>,std::vector<hit_point_t>> hits; //Stores all the hits
+        std::map<int,std::vector<cpoint_t>> mip_cluster; //Stores the selected Event Ids
         
 void print_cpoint_t(int ii,int jj) // prints all the clusters
 {
