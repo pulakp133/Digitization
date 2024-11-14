@@ -81,6 +81,19 @@ std::vector<int> cluster_size(int ii, int jj)
     return cluster_sizes;
 }
 
+int cluster_size_group(int ii, int jj, int g)
+{
+    std::pair<int,int> pr = {ii,jj};
+    int count = 0;
+    for(auto &hpt : hits[pr])
+        {
+            
+            if(g==hpt.group)
+            {count++;}
+        }
+    return count;
+}
+
 int max_cluster_size(int events, int layers)
 {
     std::vector<int> cluster_sizes;
@@ -143,7 +156,7 @@ std::vector<int> mip_event(int entries,int max_layers)
         {
             for(int j=1; j<=max_layers; j++)
                 {
-                    if(j==1 && cluster_number(i,j)>2 || cluster_number(i,j)==0)
+                    if(j==1 && cluster_number(i,j)>2)
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
@@ -298,6 +311,7 @@ void digitization()
         }
 
     int max_layers = 50;
+    int mip_layers = 8;
     int pBeam__;
     double eBeam__;
     double xHit[max_hits];
@@ -327,7 +341,7 @@ void digitization()
     // Clustering
 
 
-    long EventId;
+    long eventId;
     int layer; // long
     int xpos; // long
     int ypos; // long
@@ -335,7 +349,7 @@ void digitization()
     long pBeam;
     long digit;
 
-    tvec->Branch("EventId",&EventId,"EventId/L");
+    tvec->Branch("eventId",&eventId,"eventId/L");
     tvec->Branch("layer",&layer,"layer/I");
     tvec->Branch("xpos",&xpos,"xpos/I");
     tvec->Branch("ypos",&ypos,"ypos/I");
@@ -348,11 +362,13 @@ void digitization()
     std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn;
     std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map;
 
+        std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn_aux;
+    std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_aux;
+
     for(int i=0; i<entries; i++)
         {
             tree->GetEntry(i);
 
-            std::vector<std::vector<int>> vec; // long
             std::pair<int,int> event_layer;
 
             std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_init;
@@ -365,13 +381,6 @@ void digitization()
                     
                     if(mapping_map.count(aux_pair) > 0)
                     {
-                        int l = lHit[j]; // long
-                        int x = aux_pair.first; // long
-                        int y = aux_pair.second; // long
-                        
-                        std::vector<int> hit = {l,x,y};
-                        vec.push_back(hit);
-
                         hit_point_t clhit;
                         event_layer = {i,lHit[j]};
                         clhit.x = round((xHit[j] + offset)/pad_size);
@@ -391,37 +400,44 @@ void digitization()
 
                 cluster_map[pair.first] = clhits;
                 cluster_map_linkn[pair.first] = clust_linkn;
+
+                cluster_map_aux[pair.first] = clhits;
+                cluster_map_linkn_aux[pair.first] = clust_linkn;
             
             }
 
             cluster_map_init.clear();
-            
-            std::map<std::vector<int>,long> m; // long
 
-            for(auto element : vec)
-                {
-                    m[element]++;
-                }
+            Cluster clust_aux;
+            clust_aux.cluster = cluster_map_linkn_aux;
+            clust_aux.hits = cluster_map_aux;
+
+            for(auto &pair : clust_aux.cluster)
+            {
+                std::pair<int,int> pr = pair.first;
             
-            for(auto &pair : m)
-                {
-                    EventId = i;
-                    std::vector<int> v_t = pair.first; // long
-                    layer = v_t[0];
-                    xpos = v_t[1];
-                    ypos = v_t[2];
-                    digit = pair.second;
-                    eBeam = eBeam__;
-                    pBeam = pBeam__;
-                    tvec->Fill();
-                }
-            vec.clear();
-            m.clear();
+                for(auto &clts : pair.second)
+                    {
+                        eventId = pr.first;
+                        layer = pr.second;
+                        xpos = round(clts.x);
+                        ypos = round(clts.y);
+                        int grp = clts.group;
+                        digit = clust_aux.cluster_size_group(pr.first,pr.second,grp);
+                        eBeam = eBeam__;
+                        pBeam = pBeam__;
+                        tvec->Fill();
+                    }
+            }
+            cluster_map_aux.clear();
+            cluster_map_linkn_aux.clear();
         }
-
-    tvec->Write();
     clust.cluster = cluster_map_linkn;
     clust.hits = cluster_map;
+
+
+
+    tvec->Write();
 
     auto end1 = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed1 = end1 - start;
@@ -485,10 +501,11 @@ void digitization()
     output->Close();
     
     
-    clust.mip_event_clusters(entries,max_layers);
+    clust.mip_event_clusters(entries,mip_layers);
     std::map<int,std::vector<cpoint_t>> mip_clust = clust.mip_cluster;
+    
+    std::vector<int> events = clust.mip_event(entries,mip_layers);
     /*
-    std::vector<int> events = clust.mip_event(entries,max_layers);
     int cnt=0;
     for(auto &element : events)
         {
@@ -498,6 +515,15 @@ void digitization()
         }
     cout<<"No of such Events: "<<cnt<<endl;
     */
+    
+    for(auto &i : events)
+        {
+            for(int j=0; j<mip_layers; j++)
+                {
+                    if(clust.cluster_number(i,j)>2)
+        cout<<clust.cluster_number(i,j)<< " " << i<<","<<j <<" ;";
+                }
+        }
 
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
