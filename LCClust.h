@@ -21,9 +21,16 @@
 struct hit_point_t{
   hit_point_t(): x(0), y(0), z(0), e(0.0), group(0) {};
   hit_point_t& operator=(const hit_point_t &h) { if(&h == this) return *this; x=h.x; y=h.y, z=h.z; e=h.e; group=h.group; return *this; }
+
   int x, y, z; 
   double e; 
   int group; 
+bool operator<(const hit_point_t& other) const {
+        if (x != other.x) return x < other.x;
+        if (y != other.y) return y < other.y;
+        if (z != other.z) return z < other.z;
+        return group < other.group;
+}
 };
 
 typedef hit_point_t *hpoint;
