@@ -432,6 +432,15 @@ void digitization()
 
     // Adding Histograms
 
+    std::vector<TH1F*> histograms;
+
+    for (int i = 1; i <= 50; ++i) {
+        std::string histName = "H_layer_" + std::to_string(i) + "_Cl_size"; // Generate unique name
+        std::string name = "Cluster Sizes in Layer " + std::to_string(i);
+        TH1F* hist = new TH1F(histName.c_str(), name.c_str(), 100, 0, 100); // Define the histogram
+        histograms.push_back(hist); // Store it in the vector
+    }
+
     TH1F *h2 = new TH1F("Custers_layers", "Number of Clusters in each Layer", max_layers,0,max_layers);
     TH1F *h3 = new TH1F("Cluster_Energies", "Number of Clusters with different Energies",entries,0,entries);
 
@@ -528,16 +537,17 @@ void digitization()
                             h3->Fill(vec.e);
                         }
                 }
-            /*
+            
             for(auto &element : clust_aux.cluster)
                 {
                     int lay = element.first.second;
-                    int nclt = element.second.size();
-                    int k = h2->GetBinContent(lay);
-                    int new_k = k + nclt;
-                    h2->SetBinContent(lay,new_k);
+                    std::vector<int> clsz = clust_aux.cluster_size(i,lay);
+                    for(auto &sz : clsz)
+                        {
+                            histograms[lay-1]->Fill(sz);
+                        }
                 }
-            */
+            
             cluster_map_aux.clear();
             cluster_map_linkn_aux.clear();
             mp.clear();
@@ -552,7 +562,7 @@ void digitization()
     std::cout << "Time taken: " << elapsed1.count() << " seconds" << std::endl;
     
     int Num_Clusters_cal = 0;
-    
+    /*
     for(int i=1; i<=max_layers; i++)
         {
             std::string hist_name = "layer_" + std::to_string(i) + "cluster_size";
@@ -576,8 +586,14 @@ void digitization()
             h1->Write();
             h1->Reset();
         }
-    
-
+    */
+    for(int i=0; i<max_layers; i++)
+        {
+            histograms[i]->Write();
+            int count = histograms[i]->GetEntries();
+            h2->SetBinContent(i,count);
+            
+        }
     h2->Write();
     h3->Write();
     hx->Write();
@@ -601,7 +617,7 @@ void digitization()
             //cout<<element<<", ";
         }
     */
-    cout<<"No of such Events: "<<cnt<<endl;
+    cout<<"No of mip like Events: "<<cnt<<endl;
     //clust.print_cpoint_t(10,12);
     
     /*
