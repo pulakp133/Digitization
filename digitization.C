@@ -198,7 +198,7 @@ bool check_mip_event(int i, int mip_layers) // Checks if a particular event sati
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
-                    else if(fired_pads(i,j,0)>1)
+                    else if(fired_pads(i,j,0)>2)
                     {break;}
 
                     else if(j==mip_layers && cluster_number(i,j) == 1)
