@@ -36,7 +36,7 @@ void print_cpoint_t(int ii,int jj) // prints all the clusters
     cout<<"Clusters: "<<endl;
     for(auto &vec : clust_vec)
         {
-            cout<<"("<< vec.x <<", "<< vec.y <<", "<< vec.group <<"), ";
+            cout<<"("<< vec.x <<", "<< vec.y <<", "<< vec.group <<" , "<<vec.e<<"), ";
         }
     cout<<"No of Clusters: "<< cluster[pr].size()<<endl;
 }
@@ -167,7 +167,7 @@ int fired_pads(int ii, int jj, int g)
     return pads.size();
 }
 
-std::vector<int> mip_event(int entries,int max_layers) // Event selection for mip tracks for a given number of layers to analyze
+std::vector<int> mip_events(int entries,int max_layers) // Event selection for mip tracks for a given number of layers to analyze
 {
     std::vector<int> events;
 
@@ -179,7 +179,7 @@ std::vector<int> mip_event(int entries,int max_layers) // Event selection for mi
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
-                    else if(fired_pads(i,j,0)>2)
+                    else if(fired_pads(i,j,0)>1)
                     {break;}
 
                     else if(j==max_layers && cluster_number(i,j) == 1)
@@ -190,9 +190,27 @@ std::vector<int> mip_event(int entries,int max_layers) // Event selection for mi
         }
     return events;
 }
+bool check_mip_event(int i, int mip_layers) // Checks if a particular event satisfies the required condition for the selection of mip tracks
+{
+    for(int j=1; j<=mip_layers; j++)
+                {
+                    if(j==1 && cluster_number(i,j)>2)
+                    {break;}
+                    else if(j>1 && cluster_number(i,j)!=1)
+                    {break;}
+                    else if(fired_pads(i,j,0)>1)
+                    {break;}
+
+                    else if(j==mip_layers && cluster_number(i,j) == 1)
+                    {
+                        return true;
+                    }
+                }
+    return false; 
+}
 std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layers) // Retruns all the clusters in the mip selected events in a map with event id on as the key
 {
-    auto events = mip_event(entries,max_layers);
+    auto events = mip_events(entries,max_layers);
     
     for(auto &element : events)
         {
@@ -210,19 +228,20 @@ std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layer
         }
     return mip_cluster;
 }
-std::pair<double,double> cluster_of_hit(int ii, int jj, int g) // the cluster to which the hit belongs
+std::pair<int,int> cluster_of_hit(int ii, int jj, int g) // the cluster to which the hit belongs
 {
     std::pair<int,int> pr = {ii,jj};
     std::vector<cpoint_t> vec = cluster[pr];
+    std::pair<int,int> xy = {0,0};
 
     for(auto &element : vec)
         {
             if(element.group==g)
             {
-                std::pair<int,int> xy = {element.x,element.y};
-                return xy;
+                xy = {element.x,element.y};
             }
         }
+    return xy;
 }
 
 };
@@ -356,7 +375,7 @@ void digitization()
     double eHit[max_hits];
 
     double initial_val = -1000.0;
-    
+    //
     for(int i=0; i<max_hits; i++)
         {
             xHit[i]=initial_val;
@@ -364,7 +383,7 @@ void digitization()
             lHit[i]=initial_val;
             eHit[i]=initial_val;
         }
-
+    //
     
     tree->SetBranchAddress("pBeam",&pBeam__);
     tree->SetBranchAddress("eBeam",&eBeam__);
@@ -406,8 +425,19 @@ void digitization()
     std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map;
 
 
-        std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn_aux;
+    std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn_aux;
     std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_aux;
+
+    std::vector<int> events; 
+
+    // Adding Histograms
+
+    TH1F *h2 = new TH1F("Custers_layers", "Number of Clusters in each Layer", max_layers,0,max_layers);
+    TH1F *h3 = new TH1F("Cluster_Energies", "Number of Clusters with different Energies",entries,0,entries);
+
+    TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
+    TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
+    TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
 
     for(int i=0; i<entries; i++)
         {
@@ -420,19 +450,19 @@ void digitization()
 
             for (int j=0; j<nHit; j++)
                 {
-                    int x_aux = round((xHit[j] + offset)/pad_size);
-                    int y_aux = round((yHit[j] + offset)/pad_size);
+                    int x_aux = trunc((xHit[j] + offset)/pad_size);
+                    int y_aux = trunc((yHit[j] + offset)/pad_size);
                     std::pair<int,int> aux_pair = {x_aux,y_aux}; // long
                     
                     if(mapping_map.count(aux_pair) > 0)
                     {
                         hit_point_t clhit;
                         event_layer = {i,lHit[j]};
-                        clhit.x = round((xHit[j] + offset)/pad_size);
-                        clhit.y = round((yHit[j] + offset)/pad_size);
+                        clhit.x = x_aux;
+                        clhit.y = y_aux;
                         clhit.z = lHit[j];
                         clhit.e = eHit[j];
-                        std::array<int,3> arr = {x_aux,y_aux,lHit[j]};
+                        std::array<int,3> arr = {clhit.x,clhit.y,lHit[j]};
                         mp[arr]++;
                         cluster_map_init[event_layer].push_back(clhit);
                     }
@@ -468,8 +498,8 @@ void digitization()
                     {
                         eventId = pr.first;
                         layer = pr.second;
-                        xpos = round(clts.x);
-                        ypos = round(clts.y);
+                        xpos = clts.x;
+                        ypos = clts.y;
                         int grp = clts.group;
                         digit = mp[{clts.x,clts.y,pr.second}];
                         eBeam = eBeam__;
@@ -483,6 +513,31 @@ void digitization()
                 unique_set.clear();
                 vec.clear();
             }
+
+            if(clust_aux.check_mip_event(i,mip_layers))
+            {events.push_back(i);}
+            
+            for(int j=0; j<max_layers; j++)
+                {
+                    std::pair<int,int> pr = {i,j};
+                    for(auto &vec : clust_aux.cluster[pr])
+                        {
+                            hx->Fill(vec.x);
+                            hy->Fill(vec.y);
+                            hxy->Fill(vec.x,vec.y);
+                            h3->Fill(vec.e);
+                        }
+                }
+            /*
+            for(auto &element : clust_aux.cluster)
+                {
+                    int lay = element.first.second;
+                    int nclt = element.second.size();
+                    int k = h2->GetBinContent(lay);
+                    int new_k = k + nclt;
+                    h2->SetBinContent(lay,new_k);
+                }
+            */
             cluster_map_aux.clear();
             cluster_map_linkn_aux.clear();
             mp.clear();
@@ -496,24 +551,15 @@ void digitization()
     std::chrono::duration<double> elapsed1 = end1 - start;
     std::cout << "Time taken: " << elapsed1.count() << " seconds" << std::endl;
     
-    // Adding Histograms
-
-    TH1F *h2 = new TH1F("Custers_layers", "Number of Clusters in each Layer", max_layers,0,max_layers);
-
-    TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
-    TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
-    TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
-
-    TH1F *h3 = new TH1F("Cluster_Events", "Number of Clusters in each event",entries,0,entries);
-
     int Num_Clusters_cal = 0;
+    
     for(int i=1; i<=max_layers; i++)
         {
             std::string hist_name = "layer_" + std::to_string(i) + "cluster_size";
             std::string hist_title = "Cluster size in layer " + std::to_string(i);
             int x = clust.max_cluster_size_layer(entries,i);
             TH1F *h1 = new TH1F(hist_name.c_str(),hist_title.c_str(),x,0,x);
-
+            
             for(int j=0; j<entries; j++)
                 {
                     std::pair<int,int> pr = {j,i};
@@ -521,31 +567,16 @@ void digitization()
                         {
                             h1->Fill(vec);
                         }
-                    for(auto &vec : clust.cluster[pr])
-                        {
-                            hx->Fill(vec.x);
-                            hy->Fill(vec.y);
-                            hxy->Fill(vec.x,vec.y);
-                        }
                 }
+        
             int count = h1->GetEntries();
 
             h2->SetBinContent(i,count);
-
+            
             h1->Write();
             h1->Reset();
         }
-    for(int i=0; i<entries; i++)
-        {
-            int count = 0;
-            
-            for (int j=1; j<=max_layers; j++)
-                {
-                    std::pair<int,int> pr = {i,j};
-                    count += clust.cluster[pr].size();
-                }
-            h3->SetBinContent(i,count);
-        }
+    
 
     h2->Write();
     h3->Write();
@@ -555,23 +586,25 @@ void digitization()
     output->Close();
     
     
-    clust.mip_event_clusters(entries,mip_layers); // Selection of mip like events
-    std::map<int,std::vector<cpoint_t>> mip_clust = clust.mip_cluster; // storing of all clusters in mip like events
-    
-    std::vector<int> events = clust.mip_event(entries,mip_layers); // vector containing the required event Ids
+    //clust.mip_event_clusters(entries,mip_layers); // Selection of mip like events
+    //std::vector<int> events = clust.mip_events(entries,mip_layers); // vector containing the required event Ids
 
     //cout<<clust.fired_pads(26,2,0)<<endl;
+    
+    int cnt= events.size();
 
-    int cnt=0;
+    /*
     for(auto &element : events) // printing out the selected event Ids
         {
             
             cnt++;
-            cout<<element<<", ";
+            //cout<<element<<", ";
         }
+    */
     cout<<"No of such Events: "<<cnt<<endl;
+    //clust.print_cpoint_t(10,12);
     
-    
+    /*
     for(auto &i : events) // Checking for any anomalies in selected events
         {
             for(int j=0; j<mip_layers; j++)
@@ -580,7 +613,7 @@ void digitization()
         cout<<clust.cluster_number(i,j)<< " " << i<<","<<j <<" "<<endl;
                 }
         }
-
+    */
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
