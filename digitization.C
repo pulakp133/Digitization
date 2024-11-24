@@ -150,19 +150,15 @@ int max_cluster_size_layer(int ii,int jj) // max cluster size in each layer of a
     return cluster_s;
 }
 
-int fired_pads(int ii, int jj, int g)
+int fired_pads(int ii, int jj)
 {
     std::pair<int,int> pr = {ii,jj};
-    std::vector<cpoint_t> cvec = cluster[pr];
     std::vector<hit_point_t> hvec = hits[pr];
     std::set<std::pair<int,int>> pads;
     for(auto &hit : hvec)
         {
-            if(hit.group == g)
-            {
-                std::pair<int,int> xy = {hit.x,hit.y};
-                pads.insert(xy);
-            }
+            std::pair<int,int> xy = {hit.x,hit.y};
+            pads.insert(xy);
         }
     return pads.size();
 }
@@ -179,8 +175,9 @@ std::vector<int> mip_events(int entries,int max_layers) // Event selection for m
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
-                    else if(fired_pads(i,j,0)>1)
+                    else if(fired_pads(i,j)>2)
                     {break;}
+                    
 
                     else if(j==max_layers && cluster_number(i,j) == 1)
                     {
@@ -198,7 +195,7 @@ bool check_mip_event(int i, int mip_layers) // Checks if a particular event sati
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
-                    else if(fired_pads(i,j,0)>2)
+                    else if(fired_pads(i,j)>2)
                     {break;}
 
                     else if(j==mip_layers && cluster_number(i,j) == 1)
