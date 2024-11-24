@@ -179,7 +179,7 @@ std::vector<int> mip_events(int entries,int max_layers) // Event selection for m
                     {break;}
                     
 
-                    else if(j==max_layers && cluster_number(i,j) == 1)
+                    else if(j==max_layers && cluster_number(i,j) == 1 )
                     {
                         events.push_back(i);
                     }
@@ -198,7 +198,7 @@ bool check_mip_event(int i, int mip_layers) // Checks if a particular event sati
                     else if(j>1 && fired_pads(i,j)>2)
                     {break;}
 
-                    else if(j==mip_layers && cluster_number(i,j) == 1)
+                    else if(j==mip_layers && cluster_number(i,j) == 1 && fired_pads(i,j)<3)
                     {
                         return true;
                     }
