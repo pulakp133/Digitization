@@ -171,7 +171,9 @@ std::vector<int> mip_events(int entries,int max_layers) // Event selection for m
         {
             for(int j=1; j<=max_layers; j++)
                 {
-                    if(j==1 && cluster_number(i,j)>2)
+                    if(j==1 && cluster_number(i,j)>2 )
+                    {break;}
+                    else if(j==1 && cluster_number(i,j)==0)
                     {break;}
                     else if(j>1 && cluster_number(i,j)!=1)
                     {break;}
@@ -189,19 +191,12 @@ std::vector<int> mip_events(int entries,int max_layers) // Event selection for m
 }
 bool check_mip_event(int i, int mip_layers) // Checks if a particular event satisfies the required condition for the selection of mip tracks
 {
-    for(int j=1; j<=mip_layers; j++)
+    for(int j=2; j<=mip_layers; j++)
                 {
-                    if(j==1 && cluster_number(i,j)>2)
+                    if(fired_pads(i,j)>2 || fired_pads(i,j)==0)
                     {break;}
-                    else if(j>1 && cluster_number(i,j)!=1)
-                    {break;}
-                    else if(j>1 && fired_pads(i,j)>2)
-                    {break;}
-
-                    else if(j==mip_layers && cluster_number(i,j) == 1 && fired_pads(i,j)<3)
-                    {
-                        return true;
-                    }
+                    else if(j==mip_layers && fired_pads(i,j)<3)
+                    {return true;}
                 }
     return false; 
 }
@@ -370,17 +365,6 @@ void digitization()
     double yHit[max_hits];
     int lHit[max_hits];
     double eHit[max_hits];
-
-    double initial_val = -1000.0;
-    //
-    for(int i=0; i<max_hits; i++)
-        {
-            xHit[i]=initial_val;
-            yHit[i]=initial_val;
-            lHit[i]=initial_val;
-            eHit[i]=initial_val;
-        }
-    //
     
     tree->SetBranchAddress("pBeam",&pBeam__);
     tree->SetBranchAddress("eBeam",&eBeam__);
@@ -414,13 +398,10 @@ void digitization()
     tvec->Branch("cxpos",&cxpos,"cxpos/I");
     tvec->Branch("cypos",&cypos,"cypos/I");
     tvec->Branch("clusterId",&clusterId,"clusterId/I");
-
-
     //Digitization and Clustering
 
-    std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn;
-    std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map;
-
+    //std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn;
+    //std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map;
 
     std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn_aux;
     std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_aux;
@@ -480,8 +461,8 @@ void digitization()
 
                 int n_cls = cluster_make.Clustering(clhits, clust_linkn, LCClust::Link_Neighbours);
 
-                cluster_map[pair.first] = clhits;
-                cluster_map_linkn[pair.first] = clust_linkn;
+                //cluster_map[pair.first] = clhits;
+                //cluster_map_linkn[pair.first] = clust_linkn;
 
                 cluster_map_aux[pair.first] = clhits;
                 cluster_map_linkn_aux[pair.first] = clust_linkn;
@@ -551,39 +532,9 @@ void digitization()
         }
 
     tvec->Write();
-    clust.cluster = cluster_map_linkn;
-    clust.hits = cluster_map;
-
-    auto end1 = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed1 = end1 - start;
-    std::cout << "Time taken: " << elapsed1.count() << " seconds" << std::endl;
+    //clust.cluster = cluster_map_linkn;
+    //clust.hits = cluster_map;
     
-    int Num_Clusters_cal = 0;
-    /*
-    for(int i=1; i<=max_layers; i++)
-        {
-            std::string hist_name = "layer_" + std::to_string(i) + "cluster_size";
-            std::string hist_title = "Cluster size in layer " + std::to_string(i);
-            int x = clust.max_cluster_size_layer(entries,i);
-            TH1F *h1 = new TH1F(hist_name.c_str(),hist_title.c_str(),x,0,x);
-            
-            for(int j=0; j<entries; j++)
-                {
-                    std::pair<int,int> pr = {j,i};
-                    for(auto &vec : clust.cluster_size(j,i))
-                        {
-                            h1->Fill(vec);
-                        }
-                }
-        
-            int count = h1->GetEntries();
-
-            h2->SetBinContent(i,count);
-            
-            h1->Write();
-            h1->Reset();
-        }
-    */
     for(int i=0; i<max_layers; i++)
         {
             histograms[i]->Write();
@@ -598,35 +549,18 @@ void digitization()
     hxy->Write();
     output->Close();
     
-    
-    //clust.mip_event_clusters(entries,mip_layers); // Selection of mip like events
-    //std::vector<int> events = clust.mip_events(entries,mip_layers); // vector containing the required event Ids
-
-    //cout<<clust.fired_pads(26,2,0)<<endl;
-    
     int cnt= events.size();
-
-    /*
+    fstream file;
+    file.open("MIP_like_Events", ios::out);
+    
     for(auto &element : events) // printing out the selected event Ids
         {
-            
-            cnt++;
-            //cout<<element<<", ";
+            file<<element<<endl;
         }
-    */
-    cout<<"No of mip like Events: "<<cnt<<endl;
-    //clust.print_cpoint_t(10,12);
     
-    /*
-    for(auto &i : events) // Checking for any anomalies in selected events
-        {
-            for(int j=0; j<mip_layers; j++)
-                {
-                    if(clust.cluster_number(i,j)>2)
-        cout<<clust.cluster_number(i,j)<< " " << i<<","<<j <<" "<<endl;
-                }
-        }
-    */
+    cout<<"No of mip like Events: "<<cnt<<endl;
+    file.close();
+
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
