@@ -1,3 +1,9 @@
+#include <TMath.h>
+#include <TGraph2D.h>
+#include <TCanvas.h>
+#include <TVectorD.h>
+#include <TMatrixD.h>
+#include <TEllipse.h>
 #include <TH1F.h>
 #include <TFile.h>
 #include <iostream>
@@ -15,6 +21,7 @@
 #include <algorithm>
 #include <set>
 #include "LCClust.h"
+
 
 using namespace std;
 
@@ -189,15 +196,18 @@ std::vector<int> mip_events(int entries,int max_layers) // Event selection for m
         }
     return events;
 }
-bool check_mip_event(int i, int mip_layers) // Checks if a particular event satisfies the required condition for the selection of mip tracks
+bool check_mip_event(int i, int mip_layers, int test_layer) // Checks if a particular event satisfies the required condition for the selection of mip tracks
 {
-    for(int j=2; j<=mip_layers; j++)
-                {
-                    if(fired_pads(i,j)>2 || fired_pads(i,j)==0)
-                    {break;}
-                    else if(j==mip_layers && fired_pads(i,j)<3)
-                    {return true;}
-                }
+    for(int j=1; j<=mip_layers; j++)
+        {
+            if(j!= test_layer)
+            {
+                if(fired_pads(i,j)>2 || fired_pads(i,j)==0)
+                {break;}
+                else if(j==mip_layers && fired_pads(i,j)<3)
+                {return true;}
+            }
+        }
     return false; 
 }
 std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layers) // Retruns all the clusters in the mip selected events in a map with event id on as the key
@@ -238,6 +248,80 @@ std::pair<int,int> cluster_of_hit(int ii, int jj, int g) // the cluster to which
 
 };
 
+class Track
+{
+    public:
+            
+        std::vector<double> x;
+        std::vector<double> y;
+        std::vector<double> z;
+        TVectorD direction;
+        TVectorD centroid;
+
+    Track() : direction(3), centroid(3) {}
+
+    void fit_line()
+{
+    double xMean = 0, yMean = 0, zMean = 0;
+    int nPoints = x.size();
+    
+    for (int i = 0; i < nPoints; ++i) 
+    {
+        xMean += x[i];
+        yMean += y[i];
+        zMean += z[i];
+    }
+    xMean /= nPoints;
+    yMean /= nPoints;
+    zMean /= nPoints;
+
+    centroid(0) = xMean;
+    centroid(1) = yMean;
+    centroid(2) = zMean;
+    
+    TMatrixD covariance(3, 3);
+    for (int i = 0; i < 3; ++i) 
+    {
+        covariance(i, i) += 1e-8; 
+    }
+
+    for(int i = 0; i < nPoints; ++i)
+    {
+        double dx = x[i] - xMean;
+        double dy = y[i] - yMean;
+        double dz = z[i] - zMean;
+
+        covariance(0, 0) += dx * dx;
+        covariance(0, 1) += dx * dy;
+        covariance(0, 2) += dx * dz;
+        covariance(1, 1) += dy * dy;
+        covariance(1, 2) += dy * dz;
+        covariance(2, 2) += dz * dz;
+    }
+    
+    covariance(1, 0) = covariance(0, 1);
+    covariance(2, 0) = covariance(0, 2);
+    covariance(2, 1) = covariance(1, 2);
+
+    TVectorD eigenValues(3);
+    TMatrixD eigenVectors = covariance.EigenVectors(eigenValues);
+
+    direction(0) = eigenVectors(0, 2); 
+    direction(1) = eigenVectors(1, 2);
+    direction(2) = eigenVectors(2, 2);
+}
+
+std::pair<double,double> get_xy(int test_layer)
+{
+    double t = (test_layer - centroid(2))/direction(2);
+
+    double x = direction(0) * t + centroid(0);
+    double y = direction(1) * t + centroid(1);
+    std::pair<double,double> xy = {x,y};
+    
+    return xy;
+}
+};
 
 void digitization()
 {
@@ -260,7 +344,7 @@ void digitization()
     std::string map_file;
     std::string line;
     double N_1, N_2, N_3, N_4;
-
+    int test_layer;
 
     config_file.open(config_file_name,std::ios::in);
 
@@ -289,11 +373,21 @@ void digitization()
                 ss >> N_3;
             } else if (key == "N_4") {
                 ss >> N_4;
+            } else if (key == "test_layer" ) {
+                ss >> test_layer;
             }
         }
     }
 
     config_file.close();
+
+    if(N_1 + N_2 + N_3 + N_4 != 1)
+    {
+        N_1 /= N_1 + N_2 + N_3 + N_4;
+        N_2 /= N_1 + N_2 + N_3 + N_4;
+        N_3 /= N_1 + N_2 + N_3 + N_4;
+        N_4 /= N_1 + N_2 + N_3 + N_4;
+    }
 
     } else {
         std::cerr << "Failed to open the Config file." << std::endl;
@@ -407,25 +501,32 @@ void digitization()
     std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_aux;
 
     std::vector<int> events; 
-
+    int selected_tracks=0;
     // Adding Histograms
 
     std::vector<TH1F*> histograms;
-
-    for (int i = 1; i <= 50; ++i) {
-        std::string histName = "H_layer_" + std::to_string(i) + "_Cl_size"; // Generate unique name
+    std::vector<TH1F*> MIP_histograms;
+    int max_cl_sizes[8] ={0,0,0,0,0,0,0,0};
+    for (int i = 1; i <= max_layers; ++i) {
+        std::string histName = "H_layer_" + std::to_string(i) + "_Cl_size"; 
         std::string name = "Cluster Sizes in Layer " + std::to_string(i);
-        TH1F* hist = new TH1F(histName.c_str(), name.c_str(), 100, 0, 100); // Define the histogram
-        histograms.push_back(hist); // Store it in the vector
+        TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
+        histograms.push_back(hist); 
     }
-
+    for (int i = 1; i<=mip_layers; i++)
+        {
+            std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
+            std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
+            MIP_histograms.push_back(hist);
+        }
+        
     TH1F *h2 = new TH1F("Custers_layers", "Number of Clusters in each Layer", max_layers,0,max_layers);
     TH1F *h3 = new TH1F("Cluster_Energies", "Number of Clusters with different Energies",entries,0,entries);
 
     TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
     TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
     TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
-
     for(int i=0; i<entries; i++)
         {
             tree->GetEntry(i);
@@ -501,8 +602,46 @@ void digitization()
                 vec.clear();
             }
 
-            if(clust_aux.check_mip_event(i,mip_layers))
-            {events.push_back(i);}
+            if(clust_aux.check_mip_event(i,mip_layers,test_layer))
+            {
+                events.push_back(i);
+                Track line;
+                for(int j=1; j<=mip_layers; j++)
+                    {
+                        std::pair<int,int> pr = {i,j};
+                        for(auto &element : clust_aux.cluster[pr])
+                            {
+                                line.x.push_back(element.x);
+                                line.y.push_back(element.y);
+                                line.z.push_back(element.z);
+                            }
+                    }
+                line.fit_line();
+                std::pair<double,double> xy = line.get_xy(test_layer);
+
+                std::pair<int,int> pr = {i,test_layer};
+                
+                for(auto &element : clust_aux.cluster[pr])
+                    {
+                        double k = sqrt((xy.first-element.x)*(xy.first-element.x) + (xy.second-element.y)*(xy.second-element.y));
+                        if(k<1.5)
+                        {
+                            selected_tracks+=1;
+                            for(int j=1; j<=mip_layers; j++)
+                                {
+                                    for(auto &clsize : clust_aux.cluster_size(i,j))
+                                        {
+                                            if(clsize>max_cl_sizes[j-1])
+                                            {max_cl_sizes[j-1] = clsize;}
+                                            MIP_histograms[j-1]->Fill(clsize);
+                                        }
+                                    
+                                }
+                            break;
+                        }
+                    }
+                
+            }
             
             for(int j=0; j<max_layers; j++)
                 {
@@ -534,14 +673,42 @@ void digitization()
     tvec->Write();
     //clust.cluster = cluster_map_linkn;
     //clust.hits = cluster_map;
-    
+    double nu_1, nu_2, nu_3, nu_4;
     for(int i=0; i<max_layers; i++)
         {
             histograms[i]->Write();
             int count = histograms[i]->GetEntries();
             h2->SetBinContent(i,count);
-            
         }
+    for(int i=0; i<mip_layers; i++)
+        {
+            MIP_histograms[i]->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
+            std::string s = "cluster sizes for layer: " + std::to_string(i+1);
+            TH1F *hist = (TH1F *)MIP_histograms[i]->Rebin(max_cl_sizes[i]/4 + 1,s.c_str());
+            
+            hist->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
+            hist->Scale( 1./hist->Integral());
+            
+            nu_1 += hist->GetBinContent(1);
+            nu_2 += hist->GetBinContent(2);
+            nu_3 += hist->GetBinContent(3);
+            nu_4 += hist->GetBinContent(4);
+            hist->Write();
+        }
+    
+
+    nu_1 /= mip_layers;
+    nu_2 /= mip_layers;
+    nu_3 /= mip_layers;
+    nu_4 /= mip_layers;
+
+    double epsilon_0, epsilon_1, epsilon_2, epsilon_3;
+
+    epsilon_0 = N_1 / nu_1;
+    epsilon_1 = N_2 / nu_1 - nu_2*epsilon_0*epsilon_0/nu_1;
+    epsilon_2 = N_3 / nu_1 - 2*nu_2*epsilon_0*epsilon_1/nu_1 - nu_3 * epsilon_0 * epsilon_0 *epsilon_0 / nu_1;
+    epsilon_3 = N_4 / nu_1 - (nu_2/nu_1) * (2 * epsilon_2 * epsilon_0 + epsilon_0*epsilon_0) - 3 * nu_3 * epsilon_1 * epsilon_0 * epsilon_0 / nu_1 - nu_4 * epsilon_0 * epsilon_0 * epsilon_0 * epsilon_0 / nu_1;
+        
     h2->Write();
     h3->Write();
     hx->Write();
@@ -552,6 +719,8 @@ void digitization()
     int cnt= events.size();
     fstream file;
     file.open("MIP_like_Events", ios::out);
+
+    cout<<epsilon_0 << " : "<<epsilon_1 << " : "<<epsilon_2 << " : "<<epsilon_3 << endl;
     
     for(auto &element : events) // printing out the selected event Ids
         {
@@ -559,8 +728,8 @@ void digitization()
         }
     
     cout<<"No of mip like Events: "<<cnt<<endl;
+    cout<<"no of selected tracks: "<<selected_tracks<<endl;
     file.close();
-
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
