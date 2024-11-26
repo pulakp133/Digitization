@@ -246,6 +246,28 @@ std::pair<int,int> cluster_of_hit(int ii, int jj, int g) // the cluster to which
     return xy;
 }
 
+std::vector<int> cluster_size_pads(int i,int j)
+{
+    std::pair<int,int> pr = {i,j};
+    std::vector<int> sizes ;
+
+    for(auto &element : cluster[pr])
+        {
+            int g = element.group;
+            std::set<std::pair<int,int>> set;
+            for(auto &hits : hits[pr])
+                {
+                    if(hits.group == g)
+                    {
+                    std::pair<int,int> x = {element.x, element.y};
+                    set.insert(x);}
+                }
+            sizes.push_back(set.size());
+            set.clear();
+        }
+    return sizes;
+}
+
 };
 
 class Track
@@ -517,7 +539,7 @@ void digitization()
         {
             std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
             std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
-            TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),max_hits, 0, max_hits); 
             MIP_histograms.push_back(hist);
         }
         
@@ -631,8 +653,10 @@ void digitization()
                                 {
                                     for(auto &clsize : clust_aux.cluster_size(i,j))
                                         {
+                                            
                                             if(clsize>max_cl_sizes[j-1])
                                             {max_cl_sizes[j-1] = clsize;}
+                                            
                                             MIP_histograms[j-1]->Fill(clsize);
                                         }
                                     
@@ -682,13 +706,18 @@ void digitization()
         }
     for(int i=0; i<mip_layers; i++)
         {
+            
             MIP_histograms[i]->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
             std::string s = "cluster sizes for layer: " + std::to_string(i+1);
             TH1F *hist = (TH1F *)MIP_histograms[i]->Rebin(max_cl_sizes[i]/4 + 1,s.c_str());
-            
+            //TH1F *hist = (TH1F *)MIP_histograms[i];
             hist->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
             hist->Scale( 1./hist->Integral());
-            
+            /*
+            MIP_histograms[i]->Scale(1. / MIP_histograms[i]->Integral());
+            MIP_histograms[i]->Write();
+            TH1F *hist = MIP_histograms[i];
+            */
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
@@ -720,7 +749,7 @@ void digitization()
     fstream file;
     file.open("MIP_like_Events", ios::out);
 
-    cout<<epsilon_0 << " : "<<epsilon_1 << " : "<<epsilon_2 << " : "<<epsilon_3 << endl;
+    cout<<"epsilon_0: "<<epsilon_0 << ", epsilon_1 : "<<epsilon_1 << ", epsilon_2 : "<<epsilon_2 << ", epsilon_3 : "<<epsilon_3 << endl;
     
     for(auto &element : events) // printing out the selected event Ids
         {
