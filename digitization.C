@@ -230,11 +230,11 @@ std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layer
         }
     return mip_cluster;
 }
-std::pair<int,int> cluster_of_hit(int ii, int jj, int g) // the cluster to which the hit belongs
+std::pair<double,double> cluster_of_hit(int ii, int jj, int g) // the cluster to which the hit belongs
 {
     std::pair<int,int> pr = {ii,jj};
     std::vector<cpoint_t> vec = cluster[pr];
-    std::pair<int,int> xy = {0,0};
+    std::pair<double,double> xy = {0.0,0.0};
 
     for(auto &element : vec)
         {
@@ -282,20 +282,25 @@ class Track
 
     Track() : direction(3), centroid(3) {}
 
-    void fit_line()
+    void fit_line(int test_layer)
 {
     double xMean = 0, yMean = 0, zMean = 0;
     int nPoints = x.size();
-    
+    int cnt=0;
+    std::vector<int> index;
     for (int i = 0; i < nPoints; ++i) 
     {
+        if(z[i] != test_layer){
         xMean += x[i];
         yMean += y[i];
         zMean += z[i];
+        cnt += 1;
+        index.push_back(i);
+        }
     }
-    xMean /= nPoints;
-    yMean /= nPoints;
-    zMean /= nPoints;
+    xMean /= cnt;
+    yMean /= cnt;
+    zMean /= cnt;
 
     centroid(0) = xMean;
     centroid(1) = yMean;
@@ -307,18 +312,18 @@ class Track
         covariance(i, i) += 1e-8; 
     }
 
-    for(int i = 0; i < nPoints; ++i)
+    for(auto &i : index)
     {
-        double dx = x[i] - xMean;
-        double dy = y[i] - yMean;
-        double dz = z[i] - zMean;
-
-        covariance(0, 0) += dx * dx;
-        covariance(0, 1) += dx * dy;
-        covariance(0, 2) += dx * dz;
-        covariance(1, 1) += dy * dy;
-        covariance(1, 2) += dy * dz;
-        covariance(2, 2) += dz * dz;
+            double dx = x[i] - xMean;
+            double dy = y[i] - yMean;
+            double dz = z[i] - zMean;
+    
+            covariance(0, 0) += dx * dx;
+            covariance(0, 1) += dx * dy;
+            covariance(0, 2) += dx * dz;
+            covariance(1, 1) += dy * dy;
+            covariance(1, 2) += dy * dz;
+            covariance(2, 2) += dz * dz;
     }
     
     covariance(1, 0) = covariance(0, 1);
@@ -343,6 +348,56 @@ std::pair<double,double> get_xy(int test_layer)
     
     return xy;
 }
+bool is_straight(int test_layer)
+{
+    int n = x.size();
+    if (n < 3) 
+    {
+        return true;
+    }
+    
+    int ref_1, ref_2;
+
+    for(auto &el : z)
+        {
+            if(el != test_layer)
+            {
+                ref_1 = el;
+            }
+        }
+    for(auto &el : z)
+        {
+            if(el != test_layer && ref_1 != el)
+            {
+                ref_2 = el;
+            }
+        }
+    
+    double dx_ref = x[ref_2] - x[ref_1];
+    double dy_ref = y[ref_2] - y[ref_1];
+    double dz_ref = z[ref_2] - z[ref_1];
+
+    for (int i = 0; i < n; i++) 
+    {
+        if(z[i] != ref_1 && z[i] != ref_2)
+        {
+            double dx = x[i] - x[ref_1];
+            double dy = y[i] - y[ref_1];
+            double dz = z[i] - z[ref_1];
+    
+            
+            double cx = dy_ref * dz - dz_ref * dy;
+            double cy = dz_ref * dx - dx_ref * dz;
+            double cz = dx_ref * dy - dy_ref * dx;
+    
+            
+            const double epsilon = 1e-9; 
+            if (std::abs(cx) > epsilon || std::abs(cy) > epsilon || std::abs(cz) > epsilon) 
+            {return false; }
+        }
+    }
+    return true;
+}
 };
 
 void digitization()
@@ -360,12 +415,11 @@ void digitization()
     //Loading config file into a map
 
     double offset;
-    double
-    pad_size;
+    double pad_size;
     std::string g4_file;
     std::string map_file;
     std::string line;
-    double N_1, N_2, N_3, N_4;
+    double N_1, N_2, N_3, N_4, initial_efficiency;
     int test_layer;
 
     config_file.open(config_file_name,std::ios::in);
@@ -397,6 +451,8 @@ void digitization()
                 ss >> N_4;
             } else if (key == "test_layer" ) {
                 ss >> test_layer;
+            } else if (key == "initial_efficiency" ) {
+                ss >> initial_efficiency;
             }
         }
     }
@@ -500,8 +556,8 @@ void digitization()
     double eBeam;
     long pBeam;
     long digit;
-    int cxpos;
-    int cypos;
+    double cxpos;
+    double cypos;
     int clusterId;
 
     tvec->Branch("eventId",&eventId,"eventId/L");
@@ -511,8 +567,8 @@ void digitization()
     tvec->Branch("eBeam",&eBeam,"eBeam/D");
     tvec->Branch("pBeam",&pBeam,"pBeam/L");
     tvec->Branch("digit",&digit,"digit/L");
-    tvec->Branch("cxpos",&cxpos,"cxpos/I");
-    tvec->Branch("cypos",&cypos,"cypos/I");
+    tvec->Branch("cxpos",&cxpos,"cxpos/D");
+    tvec->Branch("cypos",&cypos,"cypos/D");
     tvec->Branch("clusterId",&clusterId,"clusterId/I");
     //Digitization and Clustering
 
@@ -614,7 +670,7 @@ void digitization()
                         digit = mp[{clts.x,clts.y,pr.second}];
                         eBeam = eBeam__;
                         pBeam = pBeam__;
-                        std::pair<int,int> xy = clust_aux.cluster_of_hit(pr.first,pr.second,grp);
+                        std::pair<double,double> xy = clust_aux.cluster_of_hit(pr.first,pr.second,grp);
                         cxpos = xy.first;
                         cypos = xy.second;
                         clusterId = grp;
@@ -638,7 +694,7 @@ void digitization()
                                 line.z.push_back(element.z);
                             }
                     }
-                line.fit_line();
+                line.fit_line(test_layer);
                 std::pair<double,double> xy = line.get_xy(test_layer);
 
                 std::pair<int,int> pr = {i,test_layer};
@@ -646,7 +702,7 @@ void digitization()
                 for(auto &element : clust_aux.cluster[pr])
                     {
                         double k = sqrt((xy.first-element.x)*(xy.first-element.x) + (xy.second-element.y)*(xy.second-element.y));
-                        if(k<1.5)
+                        if(k<1.5 && line.is_straight(test_layer))
                         {
                             selected_tracks+=1;
                             for(int j=1; j<=mip_layers; j++)
@@ -695,9 +751,21 @@ void digitization()
         }
 
     tvec->Write();
+    int min_clsz = max_cl_sizes[0];
+    for (auto &x : max_cl_sizes)
+        {
+            if(x<min_clsz)
+            {
+                min_clsz = x;
+            }
+        }
     //clust.cluster = cluster_map_linkn;
     //clust.hits = cluster_map;
-    double nu_1, nu_2, nu_3, nu_4;
+    double nu_1 = 0;
+    double nu_2 = 0;
+    double nu_3 = 0;
+    double nu_4 = 0;
+
     for(int i=0; i<max_layers; i++)
         {
             histograms[i]->Write();
@@ -708,7 +776,7 @@ void digitization()
         {
             
             MIP_histograms[i]->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
-            std::string s = "cluster sizes for layer: " + std::to_string(i+1);
+            std::string s = "cluster_sizes_for_layer_" + std::to_string(i+1);
             TH1F *hist = (TH1F *)MIP_histograms[i]->Rebin(max_cl_sizes[i]/4 + 1,s.c_str());
             //TH1F *hist = (TH1F *)MIP_histograms[i];
             hist->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
@@ -748,7 +816,7 @@ void digitization()
     int cnt= events.size();
     fstream file;
     file.open("MIP_like_Events", ios::out);
-
+    cout<<"nu_1: "<<nu_1<<", nu_2: "<<nu_2<<", nu_3: "<<nu_3<<", nu_4: "<<nu_4<<endl;
     cout<<"epsilon_0: "<<epsilon_0 << ", epsilon_1 : "<<epsilon_1 << ", epsilon_2 : "<<epsilon_2 << ", epsilon_3 : "<<epsilon_3 << endl;
     
     for(auto &element : events) // printing out the selected event Ids
