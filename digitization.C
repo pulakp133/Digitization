@@ -336,6 +336,8 @@ class Track
     direction(0) = eigenVectors(0, 2); 
     direction(1) = eigenVectors(1, 2);
     direction(2) = eigenVectors(2, 2);
+
+    index.clear();
 }
 
 std::pair<double,double> get_xy(int test_layer)
@@ -356,20 +358,21 @@ bool is_straight(int test_layer)
         return true;
     }
     
-    int ref_1, ref_2;
+    int ref_1 = 0;
+    int ref_2 = 0;
 
-    for(auto &el : z)
+    for(int i = 0; i < n; i++)
         {
-            if(el != test_layer)
+            if(z[i] != test_layer)
             {
-                ref_1 = el;
+                ref_1 = i;
             }
         }
-    for(auto &el : z)
+    for(int i = 0; i < n; i++)
         {
-            if(el != test_layer && ref_1 != el)
+            if(z[i] != test_layer && ref_1 != i)
             {
-                ref_2 = el;
+                ref_2 = i;
             }
         }
     
@@ -379,7 +382,7 @@ bool is_straight(int test_layer)
 
     for (int i = 0; i < n; i++) 
     {
-        if(z[i] != ref_1 && z[i] != ref_2)
+        if(i != ref_1 && i != ref_2)
         {
             double dx = x[i] - x[ref_1];
             double dy = y[i] - y[ref_1];
@@ -591,13 +594,15 @@ void digitization()
         TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
         histograms.push_back(hist); 
     }
+    
     for (int i = 1; i<=mip_layers; i++)
         {
             std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
             std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
-            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),max_hits, 0, max_hits); 
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),10, 1, 10); 
             MIP_histograms.push_back(hist);
         }
+    
         
     TH1F *h2 = new TH1F("Custers_layers", "Number of Clusters in each Layer", max_layers,0,max_layers);
     TH1F *h3 = new TH1F("Cluster_Energies", "Number of Clusters with different Energies",entries,0,entries);
@@ -605,6 +610,8 @@ void digitization()
     TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
     TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
     TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
+    TH1F *h4 = new TH1F("Residue_Distribution", "Distribution of Residuals",20,0,20);
+
     for(int i=0; i<entries; i++)
         {
             tree->GetEntry(i);
@@ -696,13 +703,14 @@ void digitization()
                     }
                 line.fit_line(test_layer);
                 std::pair<double,double> xy = line.get_xy(test_layer);
-
+                bool straight = line.is_straight(test_layer);
                 std::pair<int,int> pr = {i,test_layer};
                 
                 for(auto &element : clust_aux.cluster[pr])
                     {
                         double k = sqrt((xy.first-element.x)*(xy.first-element.x) + (xy.second-element.y)*(xy.second-element.y));
-                        if(k<1.5 && line.is_straight(test_layer))
+                        h4->Fill(k);
+                        if(k<1.5 && straight)
                         {
                             selected_tracks+=1;
                             for(int j=1; j<=mip_layers; j++)
@@ -774,18 +782,18 @@ void digitization()
         }
     for(int i=0; i<mip_layers; i++)
         {
-            
+            /*
             MIP_histograms[i]->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
             std::string s = "cluster_sizes_for_layer_" + std::to_string(i+1);
             TH1F *hist = (TH1F *)MIP_histograms[i]->Rebin(max_cl_sizes[i]/4 + 1,s.c_str());
             //TH1F *hist = (TH1F *)MIP_histograms[i];
             hist->GetXaxis()->SetRangeUser(0,max_cl_sizes[i]);
             hist->Scale( 1./hist->Integral());
-            /*
-            MIP_histograms[i]->Scale(1. / MIP_histograms[i]->Integral());
-            MIP_histograms[i]->Write();
-            TH1F *hist = MIP_histograms[i];
             */
+            
+            MIP_histograms[i]->Scale(1. / MIP_histograms[i]->Integral());
+            TH1F *hist = MIP_histograms[i];
+            
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
@@ -808,6 +816,7 @@ void digitization()
         
     h2->Write();
     h3->Write();
+    h4->Write();
     hx->Write();
     hy->Write();
     hxy->Write();
