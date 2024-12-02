@@ -408,7 +408,7 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
             hist[z[i]-1]->Fill(xr);
             hist[z[i]-1+layers]->Fill(yr);
             
-            if(residue>1.5){res = false;}
+            if(residue>1.1){res = false;}
             }
         }
 
@@ -818,7 +818,7 @@ void digitization()
     for(int i=0; i<mip_layers; i++)
         {
             TH1F *hist = MIP_histograms[i];
-            //hist->Scale(1 / hist->Integral(),"width");
+            hist->Scale(1 / hist->Integral(),"width");
             
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
