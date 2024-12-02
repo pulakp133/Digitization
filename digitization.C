@@ -77,7 +77,6 @@ std::vector<int> cluster_size(int ii, int jj) // A vector of cluster sizes in ea
     int x =cluster_number(ii,jj);
     std::vector<int> cl_sizes(x, 0);
 
-    int count=0;
     for(auto &hpt : hits[pr])
     {
         cl_sizes[hpt.group]++;
@@ -298,10 +297,10 @@ void fit3Dline(int test_layer)
         }
     principal->MakePrincipals();
 
-    // Extract principal components
+    
     const TVectorD *eigenvalues = principal->GetEigenValues();
-const TMatrixD *eigenvectors = principal->GetEigenVectors();
-const TVectorD *meanValues = principal->GetMeanValues();
+    const TMatrixD *eigenvectors = principal->GetEigenVectors();
+    const TVectorD *meanValues = principal->GetMeanValues();
 
 
     Double_t dir_x = (*eigenvectors)(0, 0);
@@ -310,7 +309,6 @@ const TVectorD *meanValues = principal->GetMeanValues();
 
     dirn = {dir_x,dir_y,dir_z};
     
-    // Point on the line (mean of data points)
     Double_t x0 = (*meanValues)[0];
     Double_t y0 = (*meanValues)[1];
     Double_t z0 = (*meanValues)[2];
@@ -386,58 +384,35 @@ std::pair<double,double> get_xy(int test_layer)
     //cout<<x<<", "<<y<<", "<<t<<","<<direction(0)<<","<<direction(1)<<","<<direction(2)<<endl;
     return xy;
 }
-bool is_straight(int test_layer, int mip_layer)
+bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 {
     int n = x.size();
     if (n < 3) 
     {
         return true;
     }
-    
-    int ref_1 = 0;
-    int ref_2 = 0;
 
-    for(int i = 0; i < n; i++)
+    bool res = true;
+
+    for(int i=0; i<n; i++)
         {
-            if(z[i] != test_layer)
-            {
-                ref_1 = i;
-                break;
+            if(z[i]!= test_layer){
+            std::pair<double,double> z_ = get_xy(z[i]);
+            double x2 = z_.first;
+            double y2 = z_.second;
+            double x1 = x[i];
+            double y1 = y[i];
+            double xr = x1-x2;
+            double yr = y1-y2;
+            double residue = sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2));
+            hist[z[i]-1]->Fill(xr);
+            hist[z[i]-1+layers]->Fill(yr);
+            
+            if(residue>1.5){res = false;}
             }
         }
-    for(int i = 0; i < n; i++)
-        {
-            if(z[i] != test_layer && ref_1 != i)
-            {
-                ref_2 = i;
-                break;
-            }
-        }
-    
-    double dx_ref = x[ref_2] - x[ref_1];
-    double dy_ref = y[ref_2] - y[ref_1];
-    double dz_ref = z[ref_2] - z[ref_1];
 
-    for (int i = 0; i < n; i++) 
-    {
-        if(i != ref_1 && i != ref_2)
-        {
-            double dx = x[i] - x[ref_1];
-            double dy = y[i] - y[ref_1];
-            double dz = z[i] - z[ref_1];
-    
-            
-            double cx = dy_ref * dz - dz_ref * dy;
-            double cy = dz_ref * dx - dx_ref * dz;
-            double cz = dx_ref * dy - dy_ref * dx;
-    
-            
-            const double epsilon = 1e-8; 
-            if (std::abs(cx) > epsilon || std::abs(cy) > epsilon || std::abs(cz) > epsilon) 
-            {return false; }
-        }
-    }
-    return true;
+    return res;
 }
 };
 
@@ -625,6 +600,7 @@ void digitization()
 
     std::vector<TH1F*> histograms;
     std::vector<TH1F*> MIP_histograms;
+    std::vector<TH1F*> Residue_histograms;
     int max_cl_sizes[8] ={0,0,0,0,0,0,0,0};
     for (int i = 1; i <= max_layers; ++i) {
         std::string histName = "H_layer_" + std::to_string(i) + "_Cl_size"; 
@@ -639,8 +615,23 @@ void digitization()
         {
             std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
             std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
-            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),10, 0.5, 9.5); 
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),10, 0.5, 10.5); 
             MIP_histograms.push_back(hist);
+        }
+
+    for (int i = 1; i<=mip_layers; i++)
+        {
+            std::string histName = "MIP_layer_" + std::to_string(i) + "_Residues_x"; 
+            std::string name = "Residue Distribution in MIP Layer in x" + std::to_string(i);
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),4*80,-10, 10); 
+            Residue_histograms.push_back(hist);
+        }
+    for (int i = mip_layers+1; i<=2*mip_layers; i++)
+        {
+            std::string histName = "MIP_layer_" + std::to_string(i-mip_layers) + "_Residues_y"; 
+            std::string name = "Residue Distribution in MIP Layer in y" + std::to_string(i-mip_layers);
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),4*80, -10, 10); 
+            Residue_histograms.push_back(hist);
         }
     
         
@@ -650,8 +641,6 @@ void digitization()
     TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
     TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
     TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
-    TH1F *h4 = new TH1F("Residue_Distribution", "Distribution of Residuals",20,0,20);
-
     for(int i=0; i<entries; i++)
         {
             tree->GetEntry(i);
@@ -743,20 +732,21 @@ void digitization()
                     }
                 line.fit3Dline(test_layer);
                 std::pair<double,double> xy = line.get_xy(test_layer);
-                bool straight = line.is_straight(test_layer,mip_layers);
+                bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
                 
                 for(auto &element : clust_aux.cluster[pr])
                     {
                         double k = sqrt((xy.first-element.x)*(xy.first-element.x) + (xy.second-element.y)*(xy.second-element.y));
-                        h4->Fill(k);
+                        
                         if(k<1.5 && straight)
                         {
                             events[i]++;
                             selected_tracks+=1;
                             for(int j=1; j<=mip_layers; j++)
                                 {
-                                    for(auto &clsize : clust_aux.cluster_size(i,j))
+                                    std::vector<int> clsz_vec = clust_aux.cluster_size(i,j);
+                                    for(auto &clsize : clsz_vec)
                                         {
                                             MIP_histograms[j-1]->Fill(clsize);
                                         }
@@ -828,13 +818,15 @@ void digitization()
     for(int i=0; i<mip_layers; i++)
         {
             TH1F *hist = MIP_histograms[i];
-            hist->Scale(1 / hist->Integral());
+            //hist->Scale(1 / hist->Integral(),"width");
             
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
             nu_4 += hist->GetBinContent(4);
             hist->Write();
+            Residue_histograms[i]->Write();
+            Residue_histograms[i+mip_layers]->Write();
         }
     
 
@@ -853,7 +845,6 @@ void digitization()
         
     h2->Write();
     h3->Write();
-    h4->Write();
     hx->Write();
     hy->Write();
     hxy->Write();
