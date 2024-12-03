@@ -44,7 +44,7 @@ void print_cpoint_t(int ii,int jj) // prints all the clusters
     cout<<"Clusters: "<<endl;
     for(auto &vec : clust_vec)
         {
-            cout<<"("<< vec.x <<", "<< vec.y <<", "<< vec.z<<" , "<<vec.e<<"), ";
+            cout<<"("<< vec.x <<", "<< vec.y <<", "<< vec.group<<" , "<<vec.e<<"), ";
         }
     cout<<"No of Clusters: "<< cluster[pr].size()<<endl;
 }
@@ -76,12 +76,11 @@ std::vector<int> cluster_size(int ii, int jj) // A vector of cluster sizes in ea
     std::pair<int,int> pr = {ii,jj};
     int x =cluster_number(ii,jj);
     std::vector<int> cl_sizes(x, 0);
-
+    
     for(auto &hpt : hits[pr])
     {
         cl_sizes[hpt.group]++;
     }
-        
     return cl_sizes;
 }
 int cluster_size_group(int ii, int jj, int g) // Size of a particular cluster
@@ -199,12 +198,10 @@ bool check_mip_event(int i, int mip_layers, int test_layer) // Checks if a parti
             if(j!= test_layer)
             {
                 if(fired_pads(i,j)>2 || fired_pads(i,j)==0)
-                {break;}
-                else if(j==mip_layers && fired_pads(i,j)<3)
-                {return true;}
+                {return false;}
             }
         }
-    return false; 
+    return true; 
 }
 std::map<int,std::vector<cpoint_t>> mip_event_clusters(int entries,int max_layers) // Retruns all the clusters in the mip selected events in a map with event id on as the key
 {
@@ -273,12 +270,8 @@ class Track
         std::vector<double> x;
         std::vector<double> y;
         std::vector<int> z;
-        TVectorD direction;
-        TVectorD centroid;
         std::vector<double> dirn;
         std::vector<double> ctrd;
-        
-    Track() : direction(3), centroid(3) {}
 
 void fit3Dline(int test_layer)
 {
@@ -314,63 +307,6 @@ void fit3Dline(int test_layer)
     Double_t z0 = (*meanValues)[2];
 
     ctrd = {x0,y0,z0};
-}
-void fit_line(int test_layer)
-{
-        double xMean = 0, yMean = 0, zMean = 0;
-    int nPoints = x.size();
-    int cnt=0;
-    std::vector<int> index;
-    for (int i = 0; i < nPoints; ++i) 
-    {
-        if(z[i] != test_layer){
-        xMean += x[i];
-        yMean += y[i];
-        zMean += z[i];
-        cnt += 1;
-        index.push_back(i);
-        }
-    }
-    xMean /= cnt;
-    yMean /= cnt;
-    zMean /= cnt;
-
-    centroid(0) = xMean;
-    centroid(1) = yMean;
-    centroid(2) = zMean;
-    
-    TMatrixD covariance(3, 3);
-    for (int i = 0; i < 3; ++i) 
-    {
-        covariance(i, i) += 1e-8; 
-    }
-
-    for(auto &i : index)
-    {
-            double dx = x[i] - xMean;
-            double dy = y[i] - yMean;
-            double dz = z[i] - zMean;
-    
-            covariance(0, 0) += dx * dx;
-            covariance(0, 1) += dx * dy;
-            covariance(0, 2) += dx * dz;
-            covariance(1, 1) += dy * dy;
-            covariance(1, 2) += dy * dz;
-            covariance(2, 2) += dz * dz;
-    }
-    
-    covariance(1, 0) = covariance(0, 1);
-    covariance(2, 0) = covariance(0, 2);
-    covariance(2, 1) = covariance(1, 2);
-
-    TVectorD eigenValues(3);
-    TMatrixD eigenVectors = covariance.EigenVectors(eigenValues);
-
-    direction(0) = eigenVectors(0, 0); 
-    direction(1) = eigenVectors(1, 0);
-    direction(2) = eigenVectors(2, 0);
-
-    index.clear();
 }
 
 std::pair<double,double> get_xy(int test_layer)
@@ -609,13 +545,13 @@ void digitization()
         histograms.push_back(hist); 
     }
 
-    //TH1F* h5 = new TH1F("Cluster_sizes_in_all_layers", "Cluster Sizes",10, 0.5, 9.5); 
+    TH1F* h5 = new TH1F("Cluster_sizes_in_all_layers", "Cluster Sizes",4, 0.5, 20.5); 
     
     for (int i = 1; i<=mip_layers; i++)
         {
             std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
             std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
-            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),10, 0.5, 10.5); 
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),4, 0.5, 20.5); 
             MIP_histograms.push_back(hist);
         }
 
@@ -690,6 +626,9 @@ void digitization()
             clust_aux.cluster = cluster_map_linkn_aux;
             clust_aux.hits = cluster_map_aux;
 
+            cluster_map_aux.clear();
+            cluster_map_linkn_aux.clear();
+
             for(auto &pair : clust_aux.hits)
             {
                 std::pair<int,int> pr = pair.first;
@@ -715,7 +654,8 @@ void digitization()
                 unique_set.clear();
                 vec.clear();
             }
-
+            mp.clear();
+            
             if(clust_aux.check_mip_event(i,mip_layers,test_layer))
             {
                 events[i]=0;
@@ -747,10 +687,10 @@ void digitization()
                                 {
                                     std::vector<int> clsz_vec = clust_aux.cluster_size(i,j);
                                     for(auto &clsize : clsz_vec)
-                                        {
+                                        {    
                                             MIP_histograms[j-1]->Fill(clsize);
+                                            h5->Fill(clsize);
                                         }
-                                    
                                 }
                             break;
                         }
@@ -779,10 +719,6 @@ void digitization()
                             histograms[lay-1]->Fill(sz);
                         }
                 }
-            
-            cluster_map_aux.clear();
-            cluster_map_linkn_aux.clear();
-            mp.clear();
         }
 
     tvec->Write();
@@ -794,18 +730,24 @@ void digitization()
                 min_clsz = x;
             }
         }
-    //clust.cluster = cluster_map_linkn;
-    //clust.hits = cluster_map;
-
-    //for(int i = 1; i<= 8; i++) {clust.print_cpoint_t(13,i);}
 
     /*
-    h5->Scale(1 / h5->Integral());
+    clust.cluster = cluster_map_linkn;
+    clust.hits = cluster_map;
+
+    for(int i = 1; i<= 18; i++) {clust.print_cpoint_t(5,i);clust.print_hit_point_t(5,i);}
+
+    std::vector<int> veg =clust.cluster_size(5,16);
+    for(auto &el : veg)
+        {cout<<el<<",";}
     */
-    double nu_1 = 0; //h5->GetBinContent(1);
-    double nu_2 = 0; //h5->GetBinContent(2);
-    double nu_3 = 0; //h5->GetBinContent(3);
-    double nu_4 = 0; //h5->GetBinContent(4);
+    
+    h5->Scale(1 / h5->Integral());
+    
+    double nu_1 = h5->GetBinContent(1);
+    double nu_2 = h5->GetBinContent(2);
+    double nu_3 = h5->GetBinContent(3);
+    double nu_4 = h5->GetBinContent(4);
     
     for(int i=0; i<max_layers; i++)
         {
@@ -818,23 +760,24 @@ void digitization()
     for(int i=0; i<mip_layers; i++)
         {
             TH1F *hist = MIP_histograms[i];
-            hist->Scale(1 / hist->Integral(),"width");
-            
+            hist->Scale(1 / hist->Integral());
+            /*
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
             nu_4 += hist->GetBinContent(4);
+            */
             hist->Write();
             Residue_histograms[i]->Write();
             Residue_histograms[i+mip_layers]->Write();
         }
     
-
+    /*
     nu_1 /= mip_layers;
     nu_2 /= mip_layers;
     nu_3 /= mip_layers;
     nu_4 /= mip_layers;
-    
+    */
     
     double epsilon_0, epsilon_1, epsilon_2, epsilon_3;
 
