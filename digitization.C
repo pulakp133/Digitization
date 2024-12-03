@@ -83,6 +83,27 @@ std::vector<int> cluster_size(int ii, int jj) // A vector of cluster sizes in ea
     }
     return cl_sizes;
 }
+
+std::vector<int> cluster_size2(int ii, int jj)
+{
+    std::pair<int,int> pr = {ii,jj};
+    int x =cluster_number(ii,jj);
+    std::vector<std::set<std::pair<int,int>>> cl_sizes(x);
+    std::vector<int> sizes;
+
+    for(auto &hpt : hits[pr])
+    {
+        std::pair<int,int> p ={hpt.x,hpt.y};
+        cl_sizes[hpt.group].insert(p);
+    }
+
+    for(auto &el : cl_sizes)
+        {
+            int k = el.size();
+            sizes.push_back(k);
+        }
+    return sizes;
+}
 int cluster_size_group(int ii, int jj, int g) // Size of a particular cluster
 {
     std::pair<int,int> pr = {ii,jj};
@@ -545,13 +566,13 @@ void digitization()
         histograms.push_back(hist); 
     }
 
-    TH1F* h5 = new TH1F("Cluster_sizes_in_all_layers", "Cluster Sizes",4, 0.5, 20.5); 
+    TH1F* h5 = new TH1F("Cluster_sizes_in_all_layers", "Cluster Sizes",10, 0.5, 10.5); 
     
     for (int i = 1; i<=mip_layers; i++)
         {
             std::string histName = "MIP_layer_" + std::to_string(i) + "_Cl_size"; 
             std::string name = "Cluster Sizes in MIP Layer " + std::to_string(i);
-            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),4, 0.5, 20.5); 
+            TH1F* hist = new TH1F(histName.c_str(), name.c_str(),10, 0.5, 10.5); 
             MIP_histograms.push_back(hist);
         }
 
@@ -685,7 +706,7 @@ void digitization()
                             selected_tracks+=1;
                             for(int j=1; j<=mip_layers; j++)
                                 {
-                                    std::vector<int> clsz_vec = clust_aux.cluster_size(i,j);
+                                    std::vector<int> clsz_vec = clust_aux.cluster_size2(i,j);
                                     for(auto &clsize : clsz_vec)
                                         {    
                                             MIP_histograms[j-1]->Fill(clsize);
@@ -788,6 +809,7 @@ void digitization()
         
     h2->Write();
     h3->Write();
+    h5->Write();
     hx->Write();
     hy->Write();
     hxy->Write();
