@@ -158,7 +158,7 @@ int max_cluster_size_layer(int ii,int jj) // max cluster size in each layer of a
     
     for(int i = 0; i< ii; i++)
         {
-            std::vector<int> clusts = cluster_size(i,jj);
+            std::vector<int> clusts = cluster_size2(i,jj);
             auto max_it = std::max_element(clusts.begin(),clusts.end());
             if(max_it != clusts.end())
             {
@@ -734,7 +734,7 @@ void digitization()
             for(auto &element : clust_aux.cluster)
                 {
                     int lay = element.first.second;
-                    std::vector<int> clsz = clust_aux.cluster_size(i,lay);
+                    std::vector<int> clsz = clust_aux.cluster_size2(i,lay);
                     for(auto &sz : clsz)
                         {
                             histograms[lay-1]->Fill(sz);
