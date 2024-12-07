@@ -273,7 +273,7 @@ std::vector<int> cluster_size_pads(int i,int j)
                 {
                     if(hits.group == g)
                     {
-                    std::pair<int,int> x = {element.x, element.y};
+                    std::pair<int,int> x = {hits.x, hits.y};
                     set.insert(x);}
                 }
             sizes.push_back(set.size());
@@ -343,7 +343,7 @@ std::pair<double,double> get_xy(int test_layer)
 }
 bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 {
-    int n = x.size();
+    int n = z.size();
     if (n < 3) 
     {
         return true;
@@ -353,7 +353,6 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 
     for(int i=0; i<n; i++)
         {
-            if(z[i]!= test_layer){
             std::pair<double,double> z_ = get_xy(z[i]);
             double x2 = z_.first;
             double y2 = z_.second;
@@ -365,8 +364,8 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
             hist[z[i]-1]->Fill(xr);
             hist[z[i]-1+layers]->Fill(yr);
             
-            if(residue>1.1){res = false;}
-            }
+            if(residue>1.5){res = false;}
+            
         }
 
     return res;
@@ -695,29 +694,22 @@ void digitization()
                 std::pair<double,double> xy = line.get_xy(test_layer);
                 bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
-                
-                for(auto &element : clust_aux.cluster[pr])
-                    {
-                        double k = sqrt((xy.first-element.x)*(xy.first-element.x) + (xy.second-element.y)*(xy.second-element.y));
-                        
-                        if(k<1.5 && straight)
+
+                bool empty = clust_aux.cluster[pr].empty();
+                if(straight && !empty)
+                {
+                    events[i]++;
+                    selected_tracks+=1;
+                    for(int j=1; j<=mip_layers; j++)
                         {
-                            events[i]++;
-                            selected_tracks+=1;
-                            for(int j=1; j<=mip_layers; j++)
-                                {
-                                    std::vector<int> clsz_vec = clust_aux.cluster_size2(i,j);
-                                    for(auto &clsize : clsz_vec)
-                                        {    
-                                            MIP_histograms[j-1]->Fill(clsize);
-                                            h5->Fill(clsize);
-                                        }
+                            std::vector<int> clsz_vec = clust_aux.cluster_size2(i,j);
+                            for(auto &clsize : clsz_vec)
+                                {    
+                                    MIP_histograms[j-1]->Fill(clsize);
+                                    h5->Fill(clsize);
                                 }
-                            break;
                         }
-                    }
-                
-            }
+                }
             
             for(int j=0; j<max_layers; j++)
                 {
@@ -741,6 +733,7 @@ void digitization()
                         }
                 }
         }
+    }
 
     tvec->Write();
     int min_clsz = max_cl_sizes[0];
@@ -763,12 +756,12 @@ void digitization()
         {cout<<el<<",";}
     */
     
-    h5->Scale(1 / h5->Integral());
+    //h5->Scale(1 / h5->Integral());
     
-    double nu_1 = h5->GetBinContent(1);
-    double nu_2 = h5->GetBinContent(2);
-    double nu_3 = h5->GetBinContent(3);
-    double nu_4 = h5->GetBinContent(4);
+    double nu_1 = 0; //h5->GetBinContent(1);
+    double nu_2 = 0; //h5->GetBinContent(2);
+    double nu_3 = 0; //h5->GetBinContent(3);
+    double nu_4 = 0; //h5->GetBinContent(4);
     
     for(int i=0; i<max_layers; i++)
         {
@@ -782,23 +775,23 @@ void digitization()
         {
             TH1F *hist = MIP_histograms[i];
             hist->Scale(1 / hist->Integral());
-            /*
+            
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
             nu_4 += hist->GetBinContent(4);
-            */
+            
             hist->Write();
             Residue_histograms[i]->Write();
             Residue_histograms[i+mip_layers]->Write();
         }
     
-    /*
+    
     nu_1 /= mip_layers;
     nu_2 /= mip_layers;
     nu_3 /= mip_layers;
     nu_4 /= mip_layers;
-    */
+    
     
     double epsilon_0, epsilon_1, epsilon_2, epsilon_3;
 
@@ -809,7 +802,7 @@ void digitization()
         
     h2->Write();
     h3->Write();
-    h5->Write();
+    //h5->Write();
     hx->Write();
     hy->Write();
     hxy->Write();
