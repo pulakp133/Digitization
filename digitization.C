@@ -294,6 +294,77 @@ class Track
         std::vector<double> dirn;
         std::vector<double> ctrd;
 
+void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, double zMin = 0, double zMax = 50) {
+        // Step 1: Compute the centroid
+        double xCentroid = 0, yCentroid = 0, zCentroid = 0;
+        int nPoints = x.size();
+
+        for (int i = 0; i < nPoints; ++i) {
+            xCentroid += x[i];
+            yCentroid += y[i];
+            zCentroid += z[i];
+        }
+
+        xCentroid /= nPoints;
+        yCentroid /= nPoints;
+        zCentroid /= nPoints;
+
+        ctrd = {xCentroid, yCentroid, zCentroid};
+
+        // Step 2: Create a 3D accumulator array for Hough space
+        std::vector<std::vector<std::vector<int>>> houghSpace(
+            nThetaBins, std::vector<std::vector<int>>(nPhiBins, std::vector<int>(nDZBins, 0)));
+
+        double dTheta = M_PI / nThetaBins;
+        double dPhi = 2 * M_PI / nPhiBins;
+        double dDZ = (zMax - zMin) / nDZBins;
+
+        // Step 3: Fill Hough space by voting
+        for (int i = 0; i < nPoints; ++i) {
+            for (int thetaBin = 0; thetaBin < nThetaBins; ++thetaBin) {
+                for (int phiBin = 0; phiBin < nPhiBins; ++phiBin) {
+                    double theta = thetaBin * dTheta;
+                    double phi = phiBin * dPhi;
+
+                    // Calculate d_z for this (theta, phi)
+                    double dz = z[i] - ((x[i] - xCentroid) * cos(phi) + (y[i] - yCentroid) * sin(phi)) / tan(theta);
+
+                    // Find corresponding bin for d_z
+                    int dzBin = static_cast<int>((dz - zMin) / dDZ);
+
+                    if (dzBin >= 0 && dzBin < nDZBins) {
+                        houghSpace[thetaBin][phiBin][dzBin]++;
+                    }
+                }
+            }
+        }
+
+        // Step 4: Find the peak in Hough space
+        int maxVotes = 0;
+        int bestThetaBin = 0, bestPhiBin = 0, bestDZBin = 0;
+
+        for (int thetaBin = 0; thetaBin < nThetaBins; ++thetaBin) {
+            for (int phiBin = 0; phiBin < nPhiBins; ++phiBin) {
+                for (int dzBin = 0; dzBin < nDZBins; ++dzBin) {
+                    if (houghSpace[thetaBin][phiBin][dzBin] > maxVotes) {
+                        maxVotes = houghSpace[thetaBin][phiBin][dzBin];
+                        bestThetaBin = thetaBin;
+                        bestPhiBin = phiBin;
+                        bestDZBin = dzBin;
+                    }
+                }
+            }
+        }
+
+        // Step 5: Compute the best-fit line parameters
+        double bestTheta = bestThetaBin * dTheta;
+        double bestPhi = bestPhiBin * dPhi;
+        double bestDZ = zMin + bestDZBin * dDZ;
+
+        dirn = {cos(bestPhi) * sin(bestTheta), sin(bestPhi) * sin(bestTheta), cos(bestTheta)};
+    }
+
+
 void fit3Dline(int test_layer)
 {
     TPrincipal *principal = new TPrincipal(3, "D");
@@ -353,11 +424,11 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 
     for(int i=0; i<n; i++)
         {
-            std::pair<double,double> z_ = get_xy(z[i]);
-            double x2 = z_.first;
-            double y2 = z_.second;
+            std::pair<double,double> xy = get_xy(test_layer);
             double x1 = x[i];
+            double x2 = xy.first;
             double y1 = y[i];
+            double y2 = xy.second;
             double xr = x1-x2;
             double yr = y1-y2;
             double residue = sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2));
@@ -555,6 +626,7 @@ void digitization()
     // Adding Histograms
 
     std::vector<TH1F*> histograms;
+    std::vector<TH1F*> histograms_;
     std::vector<TH1F*> MIP_histograms;
     std::vector<TH1F*> Residue_histograms;
     int max_cl_sizes[8] ={0,0,0,0,0,0,0,0};
@@ -563,6 +635,12 @@ void digitization()
         std::string name = "Cluster Sizes in Layer " + std::to_string(i);
         TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
         histograms.push_back(hist); 
+    }
+    for (int i = 1; i <= max_layers; ++i) {
+        std::string histName = "none" + std::to_string(i) + "_Cl_size"; 
+        std::string name = "none" + std::to_string(i);
+        TH1F* hist = new TH1F(histName.c_str(), name.c_str(), max_hits, 0, max_hits); 
+        histograms_.push_back(hist); 
     }
 
     TH1F* h5 = new TH1F("Cluster_sizes_in_all_layers", "Cluster Sizes",10, 0.5, 10.5); 
@@ -682,6 +760,7 @@ void digitization()
                 Track line;
                 for(int j=1; j<=mip_layers; j++)
                     {
+                        if(j!=test_layer){
                         std::pair<int,int> pr = {i,j};
                         for(auto &element : clust_aux.cluster[pr])
                             {
@@ -689,9 +768,11 @@ void digitization()
                                 line.y.push_back(element.y);
                                 line.z.push_back(j);
                             }
+                        }
                     }
-                line.fit3Dline(test_layer);
-                std::pair<double,double> xy = line.get_xy(test_layer);
+                line.HoughTransform3D();
+                //line.fit3Dline(test_layer);
+                //std::pair<double,double> xy = line.get_xy(test_layer);
                 bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
 
@@ -727,10 +808,13 @@ void digitization()
                 {
                     int lay = element.first.second;
                     std::vector<int> clsz = clust_aux.cluster_size2(i,lay);
+                    std::vector<int> lz = clust_aux.cluster_size(i,lay);
                     for(auto &sz : clsz)
                         {
                             histograms[lay-1]->Fill(sz);
                         }
+                    for(auto &lzs : lz)
+                        {histograms_[lay-1]->Fill(lzs);}
                 }
         }
     }
@@ -766,8 +850,8 @@ void digitization()
     for(int i=0; i<max_layers; i++)
         {
             histograms[i]->Write();
-            int count = histograms[i]->GetEntries();
-            h2->SetBinContent(i,count);
+            int k = histograms_[i]->GetEntries();
+            h2->SetBinContent(i,k);
         }
 
     
@@ -816,6 +900,7 @@ void digitization()
     
     for(auto &element : events) // printing out the selected event Ids
         {
+            
             file<<element.first<<" "<< element.second<<endl;
             cnts++;
         }
