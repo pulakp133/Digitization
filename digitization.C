@@ -419,7 +419,7 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
         return true;
     }
 
-    bool res = true;
+    bool res = dirn[2]>0.975;
 
     for(int i=0; i<n; i++)
         {
@@ -769,8 +769,8 @@ void digitization()
                             }
                         }
                     }
-                line.HoughTransform3D();
-                //line.fit3Dline(test_layer);
+                //line.HoughTransform3D();
+                line.fit3Dline(test_layer);
                 //std::pair<double,double> xy = line.get_xy(test_layer);
                 bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
