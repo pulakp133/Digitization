@@ -295,7 +295,7 @@ class Track
         std::vector<double> ctrd;
 
 void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, double zMin = 0, double zMax = 50) {
-        // Step 1: Compute the centroid
+        
         double xCentroid = 0, yCentroid = 0, zCentroid = 0;
         int nPoints = x.size();
 
@@ -311,7 +311,6 @@ void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, 
 
         ctrd = {xCentroid, yCentroid, zCentroid};
 
-        // Step 2: Create a 3D accumulator array for Hough space
         std::vector<std::vector<std::vector<int>>> houghSpace(
             nThetaBins, std::vector<std::vector<int>>(nPhiBins, std::vector<int>(nDZBins, 0)));
 
@@ -319,17 +318,17 @@ void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, 
         double dPhi = 2 * M_PI / nPhiBins;
         double dDZ = (zMax - zMin) / nDZBins;
 
-        // Step 3: Fill Hough space by voting
+        
         for (int i = 0; i < nPoints; ++i) {
             for (int thetaBin = 0; thetaBin < nThetaBins; ++thetaBin) {
                 for (int phiBin = 0; phiBin < nPhiBins; ++phiBin) {
                     double theta = thetaBin * dTheta;
                     double phi = phiBin * dPhi;
 
-                    // Calculate d_z for this (theta, phi)
+                    
                     double dz = z[i] - ((x[i] - xCentroid) * cos(phi) + (y[i] - yCentroid) * sin(phi)) / tan(theta);
 
-                    // Find corresponding bin for d_z
+                    
                     int dzBin = static_cast<int>((dz - zMin) / dDZ);
 
                     if (dzBin >= 0 && dzBin < nDZBins) {
@@ -339,7 +338,7 @@ void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, 
             }
         }
 
-        // Step 4: Find the peak in Hough space
+        
         int maxVotes = 0;
         int bestThetaBin = 0, bestPhiBin = 0, bestDZBin = 0;
 
@@ -356,7 +355,7 @@ void HoughTransform3D(int nThetaBins = 50, int nPhiBins = 50, int nDZBins = 50, 
             }
         }
 
-        // Step 5: Compute the best-fit line parameters
+        
         double bestTheta = bestThetaBin * dTheta;
         double bestPhi = bestPhiBin * dPhi;
         double bestDZ = zMin + bestDZBin * dDZ;
