@@ -687,7 +687,7 @@ void digitization()
                 {
                     int x_aux = trunc((xHit[j] + offset)/pad_size);
                     int y_aux = trunc((yHit[j] + offset)/pad_size);
-                    std::pair<int,int> aux_pair = {x_aux,y_aux}; // long
+                    std::pair<int,int> aux_pair = {x_aux,y_aux}; 
                     
                     if(mapping_map.count(aux_pair) > 0)
                     {
