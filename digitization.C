@@ -372,7 +372,7 @@ void fit3Dline(int test_layer)
 
     for(int i=0; i<n; i++)
         {
-            if(z[i]!= test_layer){
+            if(z[i]!=test_layer){
             double data[3];
             data[0] = x[i];
             data[1] = y[i];
@@ -386,10 +386,11 @@ void fit3Dline(int test_layer)
     const TMatrixD *eigenvectors = principal->GetEigenVectors();
     const TVectorD *meanValues = principal->GetMeanValues();
 
+    int maxIndex = 0; 
 
-    Double_t dir_x = (*eigenvectors)(0, 0);
-    Double_t dir_y = (*eigenvectors)(1, 0);
-    Double_t dir_z = (*eigenvectors)(2, 0);
+    Double_t dir_x = (*eigenvectors)(0, maxIndex);
+    Double_t dir_y = (*eigenvectors)(1, maxIndex);
+    Double_t dir_z = (*eigenvectors)(2, maxIndex);
 
     dirn = {dir_x,dir_y,dir_z};
     
@@ -414,27 +415,25 @@ std::pair<double,double> get_xy(int test_layer)
 bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 {
     int n = z.size();
-    if (n < 3) 
-    {
-        return true;
-    }
+    double dz = sqrt(1);
 
-    bool res = dirn[2]>0.975;
+    double hz = sqrt((ctrd[0]-25)*(ctrd[0]-25) + (ctrd[1]-25)*(ctrd[1]-25));
+    bool res = (hz<1.5)&&(dirn[2]>0.98);
 
     for(int i=0; i<n; i++)
         {
-            std::pair<double,double> xy = get_xy(test_layer);
+            std::pair<double,double> xy = get_xy(z[i]);
             double x1 = x[i];
             double x2 = xy.first;
             double y1 = y[i];
             double y2 = xy.second;
             double xr = x1-x2;
             double yr = y1-y2;
-            double residue = sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2));
+            double residue = sqrt((xr)*(xr) + (yr)*(yr));
             hist[z[i]-1]->Fill(xr);
             hist[z[i]-1+layers]->Fill(yr);
             
-            if(residue>1.5){res = false;}
+            if(residue>=1.5){res = false;}
             
         }
 
@@ -674,6 +673,10 @@ void digitization()
     TH1F *hx =new TH1F("Clust_Dist_x", "Distribution of Cluster Position in X",50,0,50);
     TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
     TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
+
+    std::vector<int> ev ={12, 34, 73, 90, 116, 176, 184, 187, 252, 274, 316, 350, 352, 403, 510, 588, 590, 595, 621, 793, 839, 913, 918, 1058, 1172, 1188, 1211, 1387, 1490, 1505, 1543, 1553, 1642, 1667, 1817, 1877, 1895, 1944, 1950, 1971, 2008, 2028, 2188, 2250, 2255, 2405, 2541, 2640, 2652, 2703, 2767, 2820, 2823, 2883, 2901, 2913, 2939, 3051, 3115, 3217, 3237, 3272, 3335, 3481, 3550, 3683, 3709, 3760, 3811, 3907, 4052, 4124, 4146, 4150, 4169, 4188, 4204, 4250, 4254, 4287, 4314, 4356, 4501, 4540, 4543, 4545, 4609, 4734, 4740, 4832, 4863, 4923, 4941, 5031, 5123, 5173, 5197, 5206, 5207, 5347, 5366, 5378, 5402, 5432, 5530, 5649, 5651, 5741, 5765, 5790, 5792, 5844, 5923, 5939, 5951, 5988, 5990, 6249, 6292, 6321, 6393, 6458, 6494, 6693, 6791, 6876, 7121, 7176, 7181, 7183, 7187, 7241, 7461, 7536, 7634, 7664, 7688, 7696, 7733, 7764, 7783, 7855, 7866, 7873, 7929, 8000, 8002, 8082, 8146, 8153, 8182, 8223, 8230, 8241, 8254, 8290, 8396, 8441, 8450, 8517, 8519, 8535, 8601, 8693, 8695, 8862, 8872, 8917, 8977, 9004, 9052, 9116, 9156, 9197, 9235, 9257, 9344, 9350, 9378, 9400, 9432, 9500, 9563, 9582, 9606, 9629, 9718, 9848, 9864, 9869, 9937, 9950, 9979};
+
+    
     for(int i=0; i<entries; i++)
         {
             tree->GetEntry(i);
@@ -759,7 +762,6 @@ void digitization()
                 Track line;
                 for(int j=1; j<=mip_layers; j++)
                     {
-                        if(j!=test_layer){
                         std::pair<int,int> pr = {i,j};
                         for(auto &element : clust_aux.cluster[pr])
                             {
@@ -768,15 +770,14 @@ void digitization()
                                 line.z.push_back(j);
                             }
                         }
-                    }
                 //line.HoughTransform3D();
                 line.fit3Dline(test_layer);
                 //std::pair<double,double> xy = line.get_xy(test_layer);
                 bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
-
-                bool empty = clust_aux.cluster[pr].empty();
-                if(straight && !empty)
+                bool strt = (std::count(ev.begin(),ev.end(), i) > 0);
+                
+                if(straight)
                 {
                     events[i]++;
                     selected_tracks+=1;
@@ -819,14 +820,6 @@ void digitization()
     }
 
     tvec->Write();
-    int min_clsz = max_cl_sizes[0];
-    for (auto &x : max_cl_sizes)
-        {
-            if(x<min_clsz)
-            {
-                min_clsz = x;
-            }
-        }
 
     /*
     clust.cluster = cluster_map_linkn;
@@ -839,12 +832,12 @@ void digitization()
         {cout<<el<<",";}
     */
     
-    //h5->Scale(1 / h5->Integral());
+    h5->Scale(1 / h5->Integral());
     
-    double nu_1 = 0; //h5->GetBinContent(1);
-    double nu_2 = 0; //h5->GetBinContent(2);
-    double nu_3 = 0; //h5->GetBinContent(3);
-    double nu_4 = 0; //h5->GetBinContent(4);
+    double nu_1 = h5->GetBinContent(1);
+    double nu_2 = h5->GetBinContent(2);
+    double nu_3 = h5->GetBinContent(3);
+    double nu_4 = h5->GetBinContent(4);
     
     for(int i=0; i<max_layers; i++)
         {
@@ -858,23 +851,22 @@ void digitization()
         {
             TH1F *hist = MIP_histograms[i];
             hist->Scale(1 / hist->Integral());
-            
+            /*
             nu_1 += hist->GetBinContent(1);
             nu_2 += hist->GetBinContent(2);
             nu_3 += hist->GetBinContent(3);
             nu_4 += hist->GetBinContent(4);
-            
+            */
             hist->Write();
             Residue_histograms[i]->Write();
             Residue_histograms[i+mip_layers]->Write();
         }
     
     
-    nu_1 /= mip_layers;
-    nu_2 /= mip_layers;
-    nu_3 /= mip_layers;
-    nu_4 /= mip_layers;
-    
+    nu_1 = MIP_histograms[4]->GetBinContent(1);
+    nu_2 = MIP_histograms[4]->GetBinContent(2);
+    nu_3 = MIP_histograms[4]->GetBinContent(3);
+    nu_4 = MIP_histograms[4]->GetBinContent(4);
     
     double epsilon_0, epsilon_1, epsilon_2, epsilon_3;
 
@@ -885,7 +877,7 @@ void digitization()
         
     h2->Write();
     h3->Write();
-    //h5->Write();
+    h5->Write();
     hx->Write();
     hy->Write();
     hxy->Write();
@@ -905,7 +897,7 @@ void digitization()
         }
     
     cout<<"No of mip like Events: "<<cnts<<endl;
-    cout<<"no of selected tracks: "<<selected_tracks<<endl;
+    cout<<"no of selected straight tracks: "<<selected_tracks<<endl;
     file.close();
     // Time to run the code
     auto end = std::chrono::high_resolution_clock::now();
