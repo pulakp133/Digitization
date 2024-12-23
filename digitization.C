@@ -702,7 +702,10 @@ void digitization()
                         clhit.e = eHit[j];
                         std::array<int,3> arr = {clhit.x,clhit.y,lHit[j]};
                         mp[arr]++;
-                        cluster_map_init[event_layer].push_back(clhit);
+                        if(j==1 && (x_aux<28 || x_aux>22) && (y_aux<28 || y_aux>22))
+                        {cluster_map_init[event_layer].push_back(clhit);}
+                        else if(j!=1)
+                        {cluster_map_init[event_layer].push_back(clhit);}
                     }
                 }
             for(auto &pair : cluster_map_init)
