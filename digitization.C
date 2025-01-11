@@ -5,6 +5,7 @@
 #include <Math/Vector3D.h>
 #include <TCanvas.h>
 #include <TH1F.h>
+#include <TRandom3.h>
 #include <TFile.h>
 #include <iostream>
 #include <fstream>
@@ -441,9 +442,86 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 }
 };
 
+int extra_pads(TH1F *hist)     // determines the number of additional pads
+    {
+        double rv = hist->GetRandom();
+        int k = static_cast<int>(rv);
+        return k;
+    }
+
+std::pair<int,int> rn_pad(int x,int y, int rn)
+{
+    if(rn==0)
+    {
+        std::pair<int,int> new_pad = {x+1,y+1};
+        return new_pad;
+    }
+        
+    else if (rn ==1)
+    {
+        std::pair<int,int> new_pad = {x+1,y};
+        return new_pad;
+    }
+
+    else if (rn ==2)
+    {
+        std::pair<int,int> new_pad = {x+1,y-1};
+        return new_pad;
+    }
+
+    else if (rn ==3)
+    {
+        std::pair<int,int> new_pad = {x,y-1};
+        return new_pad;
+    }
+
+    else if (rn ==4)
+    {
+        std::pair<int,int> new_pad = {x-1,y-1};
+        return new_pad;
+    }
+
+    else if (rn ==5)
+    {
+        std::pair<int,int> new_pad = {x-1,y};
+        return new_pad;
+    }
+
+    else if (rn ==6)
+    {
+        std::pair<int,int> new_pad = {x-1,y+1};
+        return new_pad;
+    }
+
+    else if (rn ==7)
+    {
+        std::pair<int,int> new_pad = {x,y+1};
+        return new_pad;
+    }
+}
+
+std::vector<std::pair<int,int>> what_pads(int x, int y, int num_extra_pads)
+{
+    TRandom3 rng(0);
+    std::set<int> the_pads;
+    while(the_pads.size() < num_extra_pads)
+        {
+             the_pads.insert(rng.Integer(8));
+        }
+    std::vector<std::pair<int,int>> pad_locs;
+
+    for(auto &el : the_pads)
+        {
+            pad_locs.push_back(rn_pad(x,y,el));
+        }
+    return pad_locs;
+}
+
 void digitization()
 {
     auto start = std::chrono::high_resolution_clock::now();
+
+    TRandom3 rng(0);
 
     Cluster clust;
 
@@ -460,9 +538,10 @@ void digitization()
     std::string g4_file;
     std::string map_file;
     std::string line;
-    double N_1, N_2, N_3, N_4, initial_efficiency;
+    double N_1, N_2, N_3, N_4, initial_efficiency, avg_pad_multiplicity;
     int test_layer;
-
+    
+    
     config_file.open(config_file_name,std::ios::in);
 
     if (config_file.is_open()) {
@@ -494,26 +573,29 @@ void digitization()
                 ss >> test_layer;
             } else if (key == "initial_efficiency" ) {
                 ss >> initial_efficiency;
+            } else if (key == "avg_pad_multiplicity"){
+                ss >> avg_pad_multiplicity;
             }
         }
     }
 
     config_file.close();
 
-    if(N_1 + N_2 + N_3 + N_4 != 1)
-    {
-        N_1 /= N_1 + N_2 + N_3 + N_4;
-        N_2 /= N_1 + N_2 + N_3 + N_4;
-        N_3 /= N_1 + N_2 + N_3 + N_4;
-        N_4 /= N_1 + N_2 + N_3 + N_4;
-    }
-
     } else {
         std::cerr << "Failed to open the Config file." << std::endl;
         exit(1);    
     }
 
+    double N_aux = ( N_1 + N_2 + N_3 + N_4);
+        N_1 = N_1 / N_aux;
+        N_2 = N_2 / N_aux;
+        N_3 = N_3 / N_aux;
+        N_4 = N_4 / N_aux;
 
+    double scale = 0.1;
+    double min_eff = initial_efficiency*(1-scale);
+    double max_eff = initial_efficiency*(1+scale);
+    
     //Loading mapping file into a map
     std::map<std::pair<int,int>,std::pair<int,int>> mapping_map;
 
@@ -549,6 +631,7 @@ void digitization()
     TFile *output = new TFile("digitization.root","RECREATE");
 
     TTree *tvec = new TTree("tvec","tvec");
+    TTree *tvec2 = new TTree("tvec2","tvec2");
 
     
     //setting max no of hits in an event to extract data from array
@@ -569,6 +652,8 @@ void digitization()
                  max_hits=nHit+1;   
             }
         }
+
+    
 
     int max_layers = 50; // max layers in the experiment 
     int mip_layers = 8; // layers we analyze to look for mip like tracks
@@ -611,6 +696,28 @@ void digitization()
     tvec->Branch("cxpos",&cxpos,"cxpos/D");
     tvec->Branch("cypos",&cypos,"cypos/D");
     tvec->Branch("clusterId",&clusterId,"clusterId/I");
+
+    long eventId_2;
+    int layer_2; // long
+    int xpos_2; // long
+    int ypos_2; // long
+    double eBeam_2;
+    long pBeam_2;
+    long digit_2;
+    double cxpos_2;
+    double cypos_2;
+    int clusterId_2;
+
+    tvec2->Branch("eventId",&eventId_2,"eventId/L");
+    tvec2->Branch("layer",&layer_2,"layer/I");
+    tvec2->Branch("xpos",&xpos_2,"xpos/I");
+    tvec2->Branch("ypos",&ypos_2,"ypos/I");
+    tvec2->Branch("eBeam",&eBeam_2,"eBeam/D");
+    tvec2->Branch("pBeam",&pBeam_2,"pBeam/L");
+    tvec2->Branch("digit",&digit_2,"digit/L");
+    tvec2->Branch("cxpos",&cxpos_2,"cxpos/D");
+    tvec2->Branch("cypos",&cypos_2,"cypos/D");
+    tvec2->Branch("clusterId",&clusterId_2,"clusterId/I");
     //Digitization and Clustering
 
     //std::map<std::pair<int,int>,std::vector<cpoint_t>> cluster_map_linkn;
@@ -627,6 +734,16 @@ void digitization()
     std::vector<TH1F*> histograms_;
     std::vector<TH1F*> MIP_histograms;
     std::vector<TH1F*> Residue_histograms;
+    
+    TH1F *hist_pdf = new TH1F("hist","hist",4,0,4);
+
+    hist_pdf->SetBinContent(1,N_1);
+    hist_pdf->SetBinContent(2,N_2);
+    hist_pdf->SetBinContent(3,N_3);
+    hist_pdf->SetBinContent(4,N_4);
+
+    hist_pdf->Scale(1.0 / hist_pdf->Integral());
+    
     int max_cl_sizes[8] ={0,0,0,0,0,0,0,0};
     for (int i = 1; i <= max_layers; ++i) {
         std::string histName = "H_layer_" + std::to_string(i) + "_Cl_size"; 
@@ -674,8 +791,6 @@ void digitization()
     TH1F *hy =new TH1F("Clust_Dist_y", "Distribution of Cluster Position in Y",50,0,50);
     TH2F *hxy = new TH2F("Clust_Dist_xy", "2D distribution of clusters",50,0,50,50,0,50);
 
-    std::vector<int> ev ={12, 34, 73, 90, 116, 176, 184, 187, 252, 274, 316, 350, 352, 403, 510, 588, 590, 595, 621, 793, 839, 913, 918, 1058, 1172, 1188, 1211, 1387, 1490, 1505, 1543, 1553, 1642, 1667, 1817, 1877, 1895, 1944, 1950, 1971, 2008, 2028, 2188, 2250, 2255, 2405, 2541, 2640, 2652, 2703, 2767, 2820, 2823, 2883, 2901, 2913, 2939, 3051, 3115, 3217, 3237, 3272, 3335, 3481, 3550, 3683, 3709, 3760, 3811, 3907, 4052, 4124, 4146, 4150, 4169, 4188, 4204, 4250, 4254, 4287, 4314, 4356, 4501, 4540, 4543, 4545, 4609, 4734, 4740, 4832, 4863, 4923, 4941, 5031, 5123, 5173, 5197, 5206, 5207, 5347, 5366, 5378, 5402, 5432, 5530, 5649, 5651, 5741, 5765, 5790, 5792, 5844, 5923, 5939, 5951, 5988, 5990, 6249, 6292, 6321, 6393, 6458, 6494, 6693, 6791, 6876, 7121, 7176, 7181, 7183, 7187, 7241, 7461, 7536, 7634, 7664, 7688, 7696, 7733, 7764, 7783, 7855, 7866, 7873, 7929, 8000, 8002, 8082, 8146, 8153, 8182, 8223, 8230, 8241, 8254, 8290, 8396, 8441, 8450, 8517, 8519, 8535, 8601, 8693, 8695, 8862, 8872, 8917, 8977, 9004, 9052, 9116, 9156, 9197, 9235, 9257, 9344, 9350, 9378, 9400, 9432, 9500, 9563, 9582, 9606, 9629, 9718, 9848, 9864, 9869, 9937, 9950, 9979};
-
     
     for(int i=0; i<entries; i++)
         {
@@ -683,8 +798,10 @@ void digitization()
 
             std::pair<int,int> event_layer;
             std::map<std::array<int,3>,long> mp;
-
+            std::map<std::array<int,3>,long> mp_cp;
+            
             std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_init;
+            std::map<std::pair<int,int>,std::vector<hit_point_t>> cluster_map_init_cp;
 
             for (int j=0; j<nHit; j++)
                 {
@@ -702,13 +819,43 @@ void digitization()
                         clhit.e = eHit[j];
                         std::array<int,3> arr = {clhit.x,clhit.y,lHit[j]};
                         mp[arr]++;
+                        mp_cp[arr]++;
                         if(j==1 && (x_aux<28 || x_aux>22) && (y_aux<28 || y_aux>22))
-                        {cluster_map_init[event_layer].push_back(clhit);}
+                        {cluster_map_init[event_layer].push_back(clhit);
+                        
+                        cluster_map_init_cp[event_layer].push_back(clhit);}
                         else if(j!=1)
-                        {cluster_map_init[event_layer].push_back(clhit);}
+                        {cluster_map_init[event_layer].push_back(clhit);
+                        
+                        cluster_map_init_cp[event_layer].push_back(clhit);}
+                        
+                    
+                        int expd = extra_pads(hist_pdf);
+                        if(expd != 0)
+                        {
+                            std::vector<std::pair<int,int>> ex_pads = what_pads(x_aux,y_aux,expd);
+                            
+                            for(auto &pr : ex_pads)
+                                {
+                                    hit_point_t clhit;
+                                    event_layer = {i,lHit[j]};
+                                    clhit.x = pr.first;
+                                    clhit.y = pr.second;
+                                    clhit.z = lHit[j];
+                                    clhit.e = eHit[j];
+                                    std::array<int,3> arr = {clhit.x,clhit.y,lHit[j]};
+                                    mp_cp[arr]++;
+                                    if(j==1 && (x_aux<28 || x_aux>22) && (y_aux<28 || y_aux>22))
+                                    {cluster_map_init_cp[event_layer].push_back(clhit);}
+                                    else if(j!=1)
+                                    {cluster_map_init_cp[event_layer].push_back(clhit);}
+                                }
+                        }
+                            
                     }
                 }
-            for(auto &pair : cluster_map_init)
+            
+            for(auto &pair : cluster_map_init) // 1
             {
                 std::vector<hit_point_t> clhits = pair.second;
                 std::vector<cpoint_t> clust_linkn;
@@ -732,7 +879,31 @@ void digitization()
             cluster_map_aux.clear();
             cluster_map_linkn_aux.clear();
 
-            for(auto &pair : clust_aux.hits)
+            for(auto &pair : cluster_map_init_cp) // 2
+            {
+                std::vector<hit_point_t> clhits = pair.second;
+                std::vector<cpoint_t> clust_linkn;
+
+                int n_cls = cluster_make.Clustering(clhits, clust_linkn, LCClust::Link_Neighbours);
+
+                //cluster_map[pair.first] = clhits;
+                //cluster_map_linkn[pair.first] = clust_linkn;
+
+                cluster_map_aux[pair.first] = clhits;
+                cluster_map_linkn_aux[pair.first] = clust_linkn;
+            
+            }
+
+            cluster_map_init_cp.clear();
+
+            Cluster clust_aux_cp;
+            clust_aux_cp.cluster = cluster_map_linkn_aux;
+            clust_aux_cp.hits = cluster_map_aux;
+
+            cluster_map_aux.clear();
+            cluster_map_linkn_aux.clear();
+
+            for(auto &pair : clust_aux.hits) // 1
             {
                 std::pair<int,int> pr = pair.first;
                 std::vector<hit_point_t> vec = pair.second;
@@ -758,8 +929,40 @@ void digitization()
                 vec.clear();
             }
             mp.clear();
+
+            for(auto &pair : clust_aux_cp.hits) // 2
+            {
+                std::pair<int,int> pr = pair.first;
+                std::vector<hit_point_t> vec = pair.second;
+                std::set<hit_point_t> unique_set(vec.begin(), vec.end());
+
+                for(auto &clts : unique_set)
+                    {
+                        double eff_2 = rng.Uniform(0,1);
+                        double eff_thresh_2 = rng.Uniform(min_eff,max_eff);
+                        
+                        
+                        eventId_2 = pr.first;
+                        layer_2 = pr.second;
+                        xpos_2 = clts.x;
+                        ypos_2 = clts.y;
+                        int grp = clts.group;
+                        digit_2 = mp_cp[{clts.x,clts.y,pr.second}];
+                        eBeam_2 = eBeam__;
+                        pBeam_2 = pBeam__;
+                        std::pair<double,double> xy = clust_aux.cluster_of_hit(pr.first,pr.second,grp);
+                        cxpos_2 = xy.first;
+                        cypos_2 = xy.second;
+                        clusterId_2 = grp;
+                        //tvec2->Fill();
+                        if(eff_2 < eff_thresh_2){tvec2->Fill();}
+                    }
+                unique_set.clear();
+                vec.clear();
+            }
+            mp_cp.clear();
             
-            if(clust_aux.check_mip_event(i,mip_layers,test_layer))
+            if(clust_aux_cp.check_mip_event(i,mip_layers,test_layer))
             {
                 events[i]=0;
                 Track line;
@@ -778,7 +981,6 @@ void digitization()
                 //std::pair<double,double> xy = line.get_xy(test_layer);
                 bool straight = line.is_straight(Residue_histograms, mip_layers, test_layer);
                 std::pair<int,int> pr = {i,test_layer};
-                bool strt = (std::count(ev.begin(),ev.end(), i) > 0);
                 
                 if(straight)
                 {
@@ -823,6 +1025,7 @@ void digitization()
     }
 
     tvec->Write();
+    tvec2->Write();
 
     /*
     clust.cluster = cluster_map_linkn;
@@ -866,7 +1069,7 @@ void digitization()
         }
     
     
-    nu_1 = MIP_histograms[4]->GetBinContent(1);
+    nu_1 = MIP_histograms[4]->GetBinContent(1)+0.01;
     nu_2 = MIP_histograms[4]->GetBinContent(2);
     nu_3 = MIP_histograms[4]->GetBinContent(3);
     nu_4 = MIP_histograms[4]->GetBinContent(4);
@@ -890,6 +1093,8 @@ void digitization()
     int cnts = 0;
     file.open("MIP_like_Events", ios::out);
     cout<<"nu_1: "<<nu_1<<", nu_2: "<<nu_2<<", nu_3: "<<nu_3<<", nu_4: "<<nu_4<<endl;
+    cout<<"n_1: "<<N_1<<", n_2: "<<N_2<<", n_3: "<<N_3<<", n_4: "<<N_4<<endl;
+
     cout<<"epsilon_0: "<<epsilon_0 << ", epsilon_1 : "<<epsilon_1 << ", epsilon_2 : "<<epsilon_2 << ", epsilon_3 : "<<epsilon_3 << endl;
     
     for(auto &element : events) // printing out the selected event Ids
