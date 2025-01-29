@@ -2,9 +2,10 @@ offset 25.0
 pad_size 1.0
 g4_file uMSDHCAL_pi_1to60GeV_10k_0.root
 mapping_file mapping48x48.txt
+avg_pad_multiplicity 1.1
 N_1 24981.785346084922
 N_2 2198.5897370109196
 N_3 398.8277359455925
 N_4 97.32790532535228
 test_layer 5
-initial_efficiency 1
+initial_efficiency 0.98

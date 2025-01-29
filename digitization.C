@@ -444,9 +444,9 @@ bool is_straight(std::vector<TH1F*> hist,int layers, int test_layer)
 
 int extra_pads(TH1F *hist)     // determines the number of additional pads
     {
-        double rv = hist->GetRandom();
+        int rv = (int)hist->GetRandom();
         int k = static_cast<int>(rv);
-        return k;
+        return rv;
     }
 
 std::pair<int,int> rn_pad(int x,int y, int rn)
@@ -498,6 +498,7 @@ std::pair<int,int> rn_pad(int x,int y, int rn)
         std::pair<int,int> new_pad = {x,y+1};
         return new_pad;
     }
+
 }
 
 std::vector<std::pair<int,int>> what_pads(int x, int y, int num_extra_pads)
@@ -743,6 +744,7 @@ void digitization()
     hist_pdf->SetBinContent(4,N_4);
 
     hist_pdf->Scale(1.0 / hist_pdf->Integral());
+
     
     int max_cl_sizes[8] ={0,0,0,0,0,0,0,0};
     for (int i = 1; i <= max_layers; ++i) {
@@ -833,22 +835,23 @@ void digitization()
                         int expd = extra_pads(hist_pdf);
                         if(expd != 0)
                         {
+                            
                             std::vector<std::pair<int,int>> ex_pads = what_pads(x_aux,y_aux,expd);
                             
                             for(auto &pr : ex_pads)
                                 {
-                                    hit_point_t clhit;
+                                    hit_point_t clhit_2;
                                     event_layer = {i,lHit[j]};
-                                    clhit.x = pr.first;
-                                    clhit.y = pr.second;
-                                    clhit.z = lHit[j];
-                                    clhit.e = eHit[j];
-                                    std::array<int,3> arr = {clhit.x,clhit.y,lHit[j]};
+                                    clhit_2.x = pr.first;
+                                    clhit_2.y = pr.second;
+                                    clhit_2.z = lHit[j];
+                                    clhit_2.e = eHit[j];
+                                    arr = {clhit_2.x,clhit_2.y,lHit[j]};
                                     mp_cp[arr]++;
-                                    if(j==1 && (x_aux<28 || x_aux>22) && (y_aux<28 || y_aux>22))
-                                    {cluster_map_init_cp[event_layer].push_back(clhit);}
+                                    if(j==1 && (clhit_2.x<28 || clhit_2.x>22) && (clhit_2.y<28 || clhit_2.y>22))
+                                    {cluster_map_init_cp[event_layer].push_back(clhit_2);}
                                     else if(j!=1)
-                                    {cluster_map_init_cp[event_layer].push_back(clhit);}
+                                    {cluster_map_init_cp[event_layer].push_back(clhit_2);}
                                 }
                         }
                             
@@ -1069,7 +1072,7 @@ void digitization()
         }
     
     
-    nu_1 = MIP_histograms[4]->GetBinContent(1)+0.01;
+    nu_1 = MIP_histograms[4]->GetBinContent(1);
     nu_2 = MIP_histograms[4]->GetBinContent(2);
     nu_3 = MIP_histograms[4]->GetBinContent(3);
     nu_4 = MIP_histograms[4]->GetBinContent(4);
@@ -1087,6 +1090,7 @@ void digitization()
     hx->Write();
     hy->Write();
     hxy->Write();
+    hist_pdf->Write();
     output->Close();
     
     fstream file;
